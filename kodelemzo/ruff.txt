@@ -1,0 +1,2 @@
+(.venv) PS C:\Users\Akos\PycharmProjects\socapp> ruff.exe check --fix
+All checks passed!

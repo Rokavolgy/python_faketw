@@ -1,0 +1,5 @@
+Pillow==11.2.1
+protobuf==6.31.0
+PyQt5==5.15.11
+Requests==2.32.3
+win10toast==0.9
