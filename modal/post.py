@@ -1,10 +1,14 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from time import gmtime
 from typing import List, Optional
+
+import google.cloud.firestore_v1
+from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+from nbclient.client import timestamp
 
 from modal.user import ProfileData
 from controller.user_session import UserSession
-
 
 @dataclass
 class PostData:
@@ -23,6 +27,7 @@ class PostData:
     @classmethod
     def from_dict(cls, data):
         user_session = UserSession()
+        a = data.get('timestamp',"")
         return cls(
             content=data.get("content", ""),
             commentsCount=data.get("commentsCount", 0),
@@ -33,7 +38,7 @@ class PostData:
             userId=data.get("userId", ""),
             likedByCurrentUser=user_session.check_if_user_liked(data.get("id", "")),
             likesCount=data.get("likesCount", 0),
-            timestamp=data.get("timestamp", None),
+            timestamp=a.astimezone(tz=None),
             userData=data.get("userData", None),
         )
 
@@ -49,5 +54,5 @@ class PostData:
             "userId": post.userId,
             "likedByCurrentUser": post.likedByCurrentUser,
             "likesCount": post.likesCount,
-            "timestamp": post.timestamp,
+            "timestamp": SERVER_TIMESTAMP,
         }

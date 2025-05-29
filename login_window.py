@@ -139,7 +139,7 @@ class LoginWindow(QMainWindow):
                 )
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Login error: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Invalid username or password")
 
 
 if __name__ == "__main__":

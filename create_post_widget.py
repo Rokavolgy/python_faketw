@@ -12,6 +12,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIcon, QFont
+from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+
 from controller.image_uploader import ImageUploader
 from controller.user_session import UserSession
 from modal.post import PostData
@@ -163,7 +165,7 @@ class CreatePostWidget(QWidget):
                 likedByCurrentUser=False,
                 likesCount=0,
                 commentsCount=0,
-                timestamp=datetime.now(),
+                timestamp=SERVER_TIMESTAMP,
             )
 
             success = create_new_post(post)

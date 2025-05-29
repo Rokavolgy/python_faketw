@@ -141,19 +141,19 @@ class SignupWindow(QMainWindow):
 
         if not (email and password and confirm_password):
             QMessageBox.warning(
-                self, "Sikertelen regisztráció :(", "Tölts ki minden adatot."
+                self, "Unsuccesful registration :(", "Please fill in all fields."
             )
             return
 
         if password != confirm_password:
             QMessageBox.warning(
-                self, "Sikertelen regisztráció :(", "Jelszavak nem egyeznek meg."
+                self, "Unsuccesful registration :(", "Passwords do not match."
             )
             return
 
         if not self.terms_checkbox.isChecked():
             QMessageBox.warning(
-                self, "Sikertelen regisztráció :(",
+                self, "Unsuccesful registration :(",
                 "Jogi csapatunk szerint igazán el kellene fogadnod a regisztációs feltételeket, mert az nem lehet, hogy nem egyezel bele a nagyon egyszerű és nagyon rövid (364 oldalas) feltételekbe melyet azért hoztunk meg hogy az oldal használata igazán egyszerű legyen."
             )
             return

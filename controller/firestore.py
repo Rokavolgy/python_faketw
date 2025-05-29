@@ -4,13 +4,13 @@ from datetime import datetime
 
 import requests
 from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtWidgets import QMessageBox
 from google.cloud import firestore
-from google.cloud.firestore_v1 import Query
+from google.cloud.firestore_v1 import Query, SERVER_TIMESTAMP
 
 from requests.exceptions import HTTPError
 from google.oauth2.credentials import Credentials
 from google.cloud.firestore import Client, Increment
-from win10toast import ToastNotifier
 
 from controller.user_session import UserSession
 from modal import post
@@ -90,6 +90,22 @@ def login_user(email, password):
         if user_info:
             profile_data = ProfileData.from_dict(user_info)
             user_session.set_profile_data(profile_data)
+        else:
+            QMessageBox.warning(None,"Warning","You haven't created a profile yet. Default values have been filled. ",QMessageBox.Ok)
+            default_profile = ProfileData(
+                id=user_session.user_id,
+                displayName=email.split("@")[0],
+                bio="",
+                profileImageUrl="",
+                coverImageUrl="",
+                website="",
+                location="",
+                dateOfBirth=datetime(2000, 1, 1),
+                createdAt=SERVER_TIMESTAMP,
+                username=email.split("@")[0],
+            )
+            user_session.set_profile_data(default_profile)
+            create_user_profile(user_session.user_id, default_profile)
         print(user_session.profile_data)
         return True, response
     except Exception as e:

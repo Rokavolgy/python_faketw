@@ -63,6 +63,6 @@ class ImageLoaderTask(QRunnable):
                 self.callback(pixmap)
         except Exception as e:
             print(f"Error loading image: {e}")
-            if self.callback:
-                self.callback(None)
+            #if self.callback:
+            #    self.callback(None)
 
