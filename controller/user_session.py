@@ -57,9 +57,7 @@ class UserSession:
 
     def check_if_user_liked(self, post_id: str) -> bool:
         if self.user_likes and post_id in self.user_likes:
-            # print("User liked the post")
             return True
-        # print("User did not liked the post")
         return False
 
     @property
@@ -76,7 +74,6 @@ class UserSession:
 
             try:
                 print("Dictionary data:", data)
-                # self._profile_data = ProfileData(**data)
             except Exception:
                 raise ValueError("i")
         elif isinstance(data, ProfileData):

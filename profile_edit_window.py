@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -13,6 +15,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtCore import Qt, pyqtSignal, QThreadPool
+from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
 from controller.image_loader_task import ImageLoaderTask
 from controller.image_uploader import ImageUploader
@@ -223,13 +226,17 @@ class ProfileEditWindow(QMainWindow):
         """Validate the input data"""
         username = self.username_edit.text().strip()
         if not username:
-            QMessageBox.warning(self, "Error", "Felhasználónév üres.")
+            QMessageBox.warning(self, "Error", "Username is empty.")
             return False
         if not all(c.isalnum() or c == '_' for c in username):
-            QMessageBox.warning(self, "Error", "A felhasználónév csak betűt, számot és aláhúzásokat tartalmazhat.")
+            QMessageBox.warning(self, "Error", "The username can only contain letters, numbers, and underscores.")
             return False
         if len(self.username_edit.text().strip()) < 3:
-            QMessageBox.warning(self, "Error", "A felhasználónév túl rövid.")
+            QMessageBox.warning(self, "Error", "Username is too short.")
+            return False
+
+        if len(self.username_edit.text().strip()) > 30:
+            QMessageBox.warning(self, "Error", "Username is too long.")
             return False
 
         if not self.display_name_edit.text().strip():
@@ -259,11 +266,24 @@ class ProfileEditWindow(QMainWindow):
             QMessageBox.warning(self, "error", "username is not valid")
             return
         self.user_data = UserSession().profile_data
-        # Prepare updated profile data
-        self.user_data.username = username
-        self.user_data.displayName = self.display_name_edit.text().strip()
-        self.user_data.bio = self.bio_edit.toPlainText().strip()
-        self.user_data.location = self.location_edit.text().strip()
+        if self.user_data:
+            self.user_data.username = username
+            self.user_data.displayName = self.display_name_edit.text().strip()
+            self.user_data.bio = self.bio_edit.toPlainText().strip()
+            self.user_data.location = self.location_edit.text().strip()
+        else:
+            self.user_data = ProfileData(
+                id=UserSession().user_id,
+                website="",
+                dateOfBirth=datetime(2000,1,8),  # well... this is not a date of birth, but we don't have it in the UI
+                createdAt= SERVER_TIMESTAMP,
+                profileImageUrl="",
+                coverImageUrl="",
+                username=username,
+                displayName=self.display_name_edit.text().strip(),
+                bio=self.bio_edit.toPlainText().strip(),
+                location=self.location_edit.text().strip(),
+            )
         if self.new_profile_pic_path:
             self.save_profile_pic_then_continue()
             return
@@ -313,7 +333,10 @@ class ProfileEditWindow(QMainWindow):
     def finalize_save(self):
         try:
             if self.is_registering:
-                create_user_profile(UserSession().user_id, self.user_data)
+                success = create_user_profile(UserSession().user_id, self.user_data)
+                if not success:
+                    QMessageBox.critical(self, "Error", "Failed to create profile.")
+                    return
                 clear_cache()
                 UserSession().set_profile_data(self.user_data)
                 self.profileCreated.emit(self.user_data)  # Emit the new signal

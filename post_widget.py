@@ -49,14 +49,18 @@ class PostsWindow(QMainWindow):
         self.posts_data = posts_data
         self.toaster = WindowsToaster("Fwitter")
         self.thread_pool = QThreadPool()
-
         self.listener = FirestoreListener()
         self.listener.newPostsSignal.connect(self.on_post_notification)
-        self.listener.subscribe_to_new_posts()
         self.listener.likeUpdatedSignal.connect(self.on_post_like)
         self.listener.removeFromStoreSignal.connect(self.on_remove_from_store)
-
         self.init_ui()
+
+
+
+        self.listener.subscribe_to_new_posts()
+
+
+
 
     def init_ui(self):
         self.setWindowTitle("Posts Viewer")
@@ -77,6 +81,7 @@ class PostsWindow(QMainWindow):
         container = QWidget()
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.posts_layout = QVBoxLayout(container)
+
 
         for post in self.posts_data:
             post_widget = PostWidget(post)
@@ -123,8 +128,6 @@ class PostsWindow(QMainWindow):
         self.toast = Toast()
         self.toast.text_fields = ['New Post', 'Hello, World!']
         for i, post in enumerate(self.posts_data):
-            print(post.id)
-            print(post_data.id)
             if post.id == post_data.id:
                 print("Poszt már létezik. Adatmódosítás.")
                 self.posts_data[i] = post_data
@@ -138,10 +141,6 @@ class PostsWindow(QMainWindow):
                 return
         self.posts_data.insert(0, post_data)
 
-
-
-
-
         if not UserSession().user_id == post_data.userId:
             print("értesítés kapva: új poszt")
             self.toast.text_fields =["New Post", "New post from " + post_data.userName]
@@ -153,7 +152,8 @@ class PostsWindow(QMainWindow):
         self.posts_layout.insertWidget(0, post_widget)
 
     def on_post_like(self):
-        print("értesítés kapva a következőről: felhasználó poszt kedvelés")
+        #updates elsewhere
+        print("ok")
         pass
 
     def on_remove_from_store(self, post_id):

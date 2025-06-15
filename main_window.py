@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
 
     def init_views(self):
 
-        posts_list, a = fetch_posts_and_user_info()
+        posts_list = fetch_posts_and_user_info()
         font_id = QFontDatabase.addApplicationFont("./fonts/WixMadeforText-Bold.ttf")
 
         if font_id != -1:

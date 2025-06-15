@@ -210,7 +210,7 @@ class ProfileView(QMainWindow):
         container = QWidget()
         self.posts_layout = QVBoxLayout(container)
 
-        self.user_posts, _ = fetch_posts_and_user_info(self.user_id)
+        self.user_posts = fetch_posts_and_user_info(self.user_id)
         for post in self.user_posts:
             post_widget = PostWidget(post, hide_buttons=True)
             post_widget.deleteClicked.connect(self.listener.delete_post_2)
@@ -275,7 +275,7 @@ class ProfileView(QMainWindow):
             )
 
         label.setPixmap(scaled_pixmap)
-        print("Betöltve")
+        print("ok")
 
     def go_back(self):
         if self.parent_window and hasattr(self.parent_window, "stacked_widget"):
@@ -283,5 +283,5 @@ class ProfileView(QMainWindow):
             self.parent_window.stacked_widget.removeWidget(self)
         else:
 
-            assert "nem lehet visszaváltani az előző oldalra"
+            assert "the previous widget doesnt exist."
             self.close()

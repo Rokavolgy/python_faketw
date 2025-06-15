@@ -171,7 +171,6 @@ def fetch_posts_and_user_info(userId=None):
         posts = fetch_user_posts(userId)
     else:
         posts = fetch_posts()
-    user_info = {}
     posts_with_user_info = []
     user_session = UserSession()
     user_likes = fetch_user_likes(user_session.user_id)
@@ -181,19 +180,18 @@ def fetch_posts_and_user_info(userId=None):
         post_data = post.PostData.from_dict(post_dict)
         userId = post_data.userId
 
-        if userId not in user_info:
-            user_data = fetch_user_info(userId)
+        user_data = fetch_user_info(userId)
 
-            if user_data:
-                user = ProfileData.from_dict(user_data)
-                post_data.userName = user.displayName
-                post_data.userProfilePicUrl = user.profileImageUrl
-                post_data.userData = user
-                if post_data.id in user_likes:
-                    post_data.likedByCurrentUser = True
-                posts_with_user_info.append(post_data)
+        if user_data:
+            user = ProfileData.from_dict(user_data)
+            post_data.userName = user.displayName
+            post_data.userProfilePicUrl = user.profileImageUrl
+            post_data.userData = user
+            if post_data.id in user_likes:
+                post_data.likedByCurrentUser = True
+            posts_with_user_info.append(post_data)
 
-    return posts_with_user_info, user_info
+    return posts_with_user_info
 
 
 def create_new_post(post_data):
@@ -339,20 +337,29 @@ class FirestoreListener(QObject):
                     post_dict = change.document.to_dict()
                     post_dict["id"] = change.document.id
                     post_data = post.PostData.from_dict(post_dict)
+                    user_id = post_data.userId
+                    user_data = fetch_user_info(user_id)
+                    if user_data:
+                        user = ProfileData.from_dict(user_data)
+                        post_data.userName = user.displayName
+                        post_data.userProfilePicUrl = user.profileImageUrl
+                        post_data.userData = user
+                    else:
+                        print(f"User data not found for userId: {user_id}")
+
 
                 if change.type.name == "REMOVED":
                     post_id = change.document.id
                     self.removeFromStoreSignal.emit(post_id)
-            if post_data is not None:
-                self.newPostsSignal.emit(post_data)
-
+                if post_data is not None:
+                    self.newPostsSignal.emit(post_data)
 
         post_ref = db.collection("posts").order_by(
             field_path="timestamp", direction=Query.DESCENDING
-        )
-        self._post_watch = post_ref.on_snapshot(on_snapshot)
+        ).limit(80)
 
-    # teljesen felesleges
+        self._post_watch = post_ref.on_snapshot(on_snapshot)
+        # teljesen felesleges
     def subscribe_to_user_likes(self, user_id):
         def on_snapshot(snapshot, changes, read_time):
             for change in changes:

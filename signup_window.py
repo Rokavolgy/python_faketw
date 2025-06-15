@@ -141,13 +141,13 @@ class SignupWindow(QMainWindow):
 
         if not (email and password and confirm_password):
             QMessageBox.warning(
-                self, "Unsuccesful registration :(", "Please fill in all fields."
+                self, "Unsuccessful registration :(", "Please fill in all fields."
             )
             return
 
         if password != confirm_password:
             QMessageBox.warning(
-                self, "Unsuccesful registration :(", "Passwords do not match."
+                self, "Unsuccessful registration :(", "Passwords do not match."
             )
             return
 
@@ -159,14 +159,14 @@ class SignupWindow(QMainWindow):
             return
 
         try:
-            success, user_data = register_user(email, password)
+            success, _ = register_user(email, password)
 
             if success:
-                profile_data = ProfileData.from_dict(user_data)
+                profile_data = ProfileData.from_dict(_)
 
                 QMessageBox.information(
-                    self, "Sikeres regisztráció!!",
-                    "A fiókod létrehozásra került. A folytatáshoz kérlek add meg a felhasználói adataidat."
+                    self, "Succesful registration",
+                    "Your account has been created. Please complete your profile in the next window."
                 )
 
                 self.open_profile_edit(profile_data)
@@ -174,8 +174,8 @@ class SignupWindow(QMainWindow):
                 self.signupSuccessful.emit(profile_data)
             else:
                 QMessageBox.warning(
-                    self, "Regisztráció sikertelen",
-                    "Valószínáleg a jelszó túl rövid vagy az email már foglalt.  (írj valahova egy 9-st)"
+                    self, "Unsuccessful registration :(",
+                    "The email is already registered or the password is too short. Please try again."
                 )
 
         except Exception as e:
@@ -192,7 +192,7 @@ class SignupWindow(QMainWindow):
         self.registrationCompleted.emit(profile_data)
 
 
-# tesztelés error!
+# for testing (will crash)
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SignupWindow()
