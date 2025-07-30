@@ -8,11 +8,13 @@ from login_window import LoginWindow
 from post_widget import PostsWindow
 from profile_view import ProfileView
 from signup_window import SignupWindow
+from comment_view import CommentView
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.posts_view = None
         self.setWindowTitle("Fwitter")
         self.setMinimumSize(600, 800)
         self.setMaximumWidth(1000)
@@ -62,6 +64,7 @@ class MainWindow(QMainWindow):
 
         self.posts_view = PostsWindow(posts_list)
         self.posts_view.profileSwitchRequested.connect(self.show_profile_view)
+        self.posts_view.commentSwitchRequested.connect(self.show_comment_view)
         self.stacked_widget.addWidget(self.posts_view)
 
         self.stacked_widget.setCurrentIndex(0)
@@ -71,6 +74,12 @@ class MainWindow(QMainWindow):
         profile_view = ProfileView(user_id=userId, parent_window=self)
 
         self.stacked_widget.addWidget(profile_view)
+        self.stacked_widget.setCurrentIndex(self.stacked_widget.count() - 1)
+
+    def show_comment_view(self, post_id):
+
+        comment_window = CommentView(post_id=post_id, parent_window=self)
+        self.stacked_widget.addWidget(comment_window)
         self.stacked_widget.setCurrentIndex(self.stacked_widget.count() - 1)
 
 

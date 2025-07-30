@@ -194,6 +194,51 @@ def fetch_posts_and_user_info(userId=None):
     return posts_with_user_info
 
 
+def fetch_post_by_id(post_id):
+    """
+    Fetch a specific post by its ID and enrich it with user data
+
+    Args:
+        post_id (str): The ID of the post to fetch
+
+    Returns:
+        PostData: The post data object with user info, or None if not found
+    """
+    try:
+        post_ref = db.collection("posts").document(post_id)
+        post_doc = post_ref.get()
+
+        if not post_doc.exists:
+            print(f"Post {post_id} not found")
+            return None
+
+        post_dict = post_doc.to_dict()
+        post_dict["id"] = post_id
+
+        post_data = post.PostData.from_dict(post_dict)
+
+        user_id = post_data.userId
+        user_data = fetch_user_info(user_id)
+
+        if user_data:
+            user = ProfileData.from_dict(user_data)
+            post_data.userName = user.displayName
+            post_data.userProfilePicUrl = user.profileImageUrl
+            post_data.userData = user
+
+            user_session = UserSession()
+            if user_session.is_authenticated:
+                user_likes = user_session.user_likes
+                if post_id in user_likes:
+                    post_data.likedByCurrentUser = True
+
+        return post_data
+
+    except Exception as e:
+        print(f"Error fetching post: {e}")
+        return None
+
+
 def create_new_post(post_data):
     try:
         post_dict = post_data.to_dict(post_data)  # ???

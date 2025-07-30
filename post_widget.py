@@ -41,6 +41,7 @@ class ClickableLabel(QLabel):
 
 class PostsWindow(QMainWindow):
     profileSwitchRequested = pyqtSignal(str)
+    commentSwitchRequested = pyqtSignal(str)
 
     def __init__(self, posts_data: List[PostData]):
         super().__init__()
@@ -86,6 +87,7 @@ class PostsWindow(QMainWindow):
         for post in self.posts_data:
             post_widget = PostWidget(post)
             post_widget.profileClicked.connect(self.switch_to_profile_mode)
+            post_widget.commentClicked.connect(self.switch_to_comment_mode)
             post_widget.deleteClicked.connect(self.listener.delete_post_2)
             self.posts_layout.addWidget(post_widget, stretch=1)
 
@@ -109,12 +111,17 @@ class PostsWindow(QMainWindow):
     def add_post_widget(self, post: PostData):
         post_widget = PostWidget(post)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
+        post_widget.commentClicked.connect(self.switch_to_comment_mode)
         post_widget.deleteClicked.connect(self.listener.delete_post_2)
         self.posts_layout.addWidget(post_widget, stretch=1)
 
     def switch_to_profile_mode(self, userId):
         print(f"profile show: {userId}")
         self.profileSwitchRequested.emit(userId)
+
+    def switch_to_comment_mode(self, postId):
+        print(f"comment show: {postId}")
+        self.commentSwitchRequested.emit(postId)
 
     def on_post_created(self, new_post: PostData):
         self.add_post_widget(new_post)
@@ -148,6 +155,7 @@ class PostsWindow(QMainWindow):
         # új widget mint an onpostcreated ben
         post_widget = PostWidget(post_data)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
+        post_widget.commentClicked.connect(self.switch_to_comment_mode)
         post_widget.deleteClicked.connect(self.listener.delete_post_2)
         self.posts_layout.insertWidget(0, post_widget)
 
