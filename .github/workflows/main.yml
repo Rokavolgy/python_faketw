@@ -43,5 +43,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ github.event.inputs.environment }}
-          path: build/build
+          path: build/main_window.build #ok
           include-hidden-files: true
