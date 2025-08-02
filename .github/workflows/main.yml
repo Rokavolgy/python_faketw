@@ -1,0 +1,40 @@
+name: Build test - Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Build'
+        required: true
+        default: 'staging'
+
+jobs:
+
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' 
+          architecture: 'x64' 
+
+      - name: Qt GUI with PySide6
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: main_window.py
+          mode: standalone
+          enable-plugins: pyside6
+          output-filename: Fwitter
+          msvc: latest
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe
+          path: build/Fwitter.exe
+          include-hidden-files: true
