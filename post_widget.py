@@ -1,4 +1,5 @@
-import os
+
+import platform
 from typing import List
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -48,7 +49,10 @@ class PostsWindow(QMainWindow):
 
         self.posts_layout = None
         self.posts_data = posts_data
-        self.toaster = WindowsToaster("Fwitter")
+        if platform.system() == "Windows":
+            self.toaster = WindowsToaster("Fwitter")
+        else:
+            self.toaster = None
         self.thread_pool = QThreadPool()
         self.listener = FirestoreListener()
         self.listener.newPostsSignal.connect(self.on_post_notification)
@@ -151,7 +155,13 @@ class PostsWindow(QMainWindow):
         if not UserSession().user_id == post_data.userId:
             print("értesítés kapva: új poszt")
             self.toast.text_fields =["New Post", "New post from " + post_data.userName]
-            self.toaster.show_toast(self.toast)
+            if self.toaster:
+                if post_data.mediaUrls:
+                    image_url = Constants.STORAGE_URL + post_data.mediaUrls[0]
+                    self.toast.display_image = ToastDisplayImage(image_url)
+                else:
+                    self.toast.display_image = None
+                self.toaster.show_toast(self.toast)
         # új widget mint an onpostcreated ben
         post_widget = PostWidget(post_data)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)

@@ -1,0 +1,52 @@
+name: Build test - Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Build'
+        required: true
+        default: 'staging'
+env:
+  PYTHONUNBUFFERED: 1
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+
+      - name: Qt GUI with PySide6
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: main_window.py
+          mode: standalone
+          enable-plugins: pyside6
+          output-file: Fwitter
+          output-dir: 'build'
+          include-data-dir: res=res
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.event.inputs.environment }}
+          path: build/main_window.dist
+          include-hidden-files: true
+
+      - name: Upload Nuitka Cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: cache-${{ github.event.inputs.environment }}
+          path: build/main_window.build
+          include-hidden-files: true
