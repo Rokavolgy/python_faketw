@@ -29,7 +29,7 @@ jobs:
           script-name: main_window.py
           mode: standalone
           enable-plugins: pyside6
-          output-filename: Fwitter
+          output-file: Fwitter
           msvc: latest
 
       - name: Upload Artifact
