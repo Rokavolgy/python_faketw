@@ -58,7 +58,7 @@ class ImageLoaderTask(QRunnable):
                     file.write(response.content)
 
             pixmap = QPixmap()
-            if pixmap.loadFromData(image_data.getbuffer()):
+            if pixmap.loadFromData(bytes(image_data.getbuffer())):
                 ImageLoaderTask.cache[self.image_url] = pixmap
                 self.callback(pixmap)
         except Exception as e:

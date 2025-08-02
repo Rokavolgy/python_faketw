@@ -7,6 +7,8 @@ on:
         description: 'Build'
         required: true
         default: 'staging'
+env:
+  PYTHONUNBUFFERED: 1
 
 jobs:
 
@@ -36,6 +38,8 @@ jobs:
           enable-plugins: pyside6
           output-file: Fwitter
           msvc: latest
+          include-data-dir: fonts
+          include-data-dir: icons
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
