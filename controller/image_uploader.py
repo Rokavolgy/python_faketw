@@ -6,13 +6,13 @@ import threading
 from PIL import Image
 import io
 
-from PyQt5.QtCore import pyqtSignal, QObject
+from PySide6.QtCore import Signal, QObject
 from modal.constants import Constants
 
 
 class ImageUploaderSignals(QObject):
-    success_signal = pyqtSignal(str)
-    failure_signal = pyqtSignal(str)
+    success_signal = Signal(str)
+    failure_signal = Signal(str)
 
     def __init__(self):
         super().__init__()

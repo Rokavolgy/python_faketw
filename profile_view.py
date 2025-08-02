@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
     QVBoxLayout,
@@ -7,8 +7,8 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QPushButton,
 )
-from PyQt5.QtGui import QFont
-from PyQt5.QtCore import Qt, QThreadPool
+from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QThreadPool
 from datetime import datetime
 
 from controller.image_loader_task import ImageLoaderTask

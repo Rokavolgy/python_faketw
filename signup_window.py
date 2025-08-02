@@ -1,7 +1,7 @@
 import sys
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
@@ -20,9 +20,9 @@ from modal.user import ProfileData
 
 
 class SignupWindow(QMainWindow):
-    signupSuccessful = pyqtSignal(ProfileData)
-    registrationCompleted = pyqtSignal(ProfileData)
-    loginRequested = pyqtSignal()
+    signupSuccessful = Signal(ProfileData)
+    registrationCompleted = Signal(ProfileData)
+    loginRequested = Signal()
 
     def __init__(self):
         super().__init__()

@@ -1,7 +1,7 @@
 import sys
 
-from PyQt5.QtGui import QFontDatabase
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PySide6.QtGui import QFontDatabase
+from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
 from controller.firestore import fetch_posts_and_user_info
 from login_window import LoginWindow
@@ -21,7 +21,14 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
+        font_id = QFontDatabase.addApplicationFont("./fonts/WixMadeforText-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont("./fonts/WixMadeforText-Bold.ttf")
 
+        if font_id != -1:
+            font_families = QFontDatabase.applicationFontFamilies(font_id)
+            print(f"Font loaded successfully! Available families: {font_families}")
+        else:
+            print("Failed to load font.")
         self.show_login_window()
 
     def show_login_window(self):
@@ -54,13 +61,7 @@ class MainWindow(QMainWindow):
     def init_views(self):
 
         posts_list = fetch_posts_and_user_info()
-        font_id = QFontDatabase.addApplicationFont("./fonts/WixMadeforText-Bold.ttf")
 
-        if font_id != -1:
-            font_families = QFontDatabase.applicationFontFamilies(font_id)
-            print(f"Font loaded successfully! Available families: {font_families}")
-        else:
-            print("Failed to load font.")
 
         self.posts_view = PostsWindow(posts_list)
         self.posts_view.profileSwitchRequested.connect(self.show_profile_view)

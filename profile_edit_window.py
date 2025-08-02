@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QVBoxLayout,
@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QScrollArea,
 )
-from PyQt5.QtGui import QPixmap, QFont
-from PyQt5.QtCore import Qt, pyqtSignal, QThreadPool
+from PySide6.QtGui import QPixmap, QFont
+from PySide6.QtCore import Qt, Signal, QThreadPool
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
 from controller.image_loader_task import ImageLoaderTask
@@ -27,8 +27,8 @@ from post_widget import ClickableLabel
 
 
 class ProfileEditWindow(QMainWindow):
-    profileUpdated = pyqtSignal(ProfileData)
-    profileCreated = pyqtSignal(ProfileData)
+    profileUpdated = Signal(ProfileData)
+    profileCreated = Signal(ProfileData)
     user_data: ProfileData
 
     def __init__(self, profile_data=None, is_registering=False):

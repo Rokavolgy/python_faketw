@@ -1,6 +1,6 @@
 import uuid
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -10,8 +10,8 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIcon, QFont
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon, QFont
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
 from controller.image_uploader import ImageUploader
@@ -25,7 +25,7 @@ def generate_random_uuid():
 
 
 class CreatePostWidget(QWidget):
-    postCreated = pyqtSignal(
+    postCreated = Signal(
         PostData
     )
 

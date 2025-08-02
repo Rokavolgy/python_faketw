@@ -81,6 +81,7 @@ class CommentWidget(QWidget):
 
 
 class CommentView(QMainWindow):
+    """View for displaying comments on a post"""
     commentPosted = Signal(object)
 
     def __init__(self, post_id=None, profile_data=None, parent_window=None):
@@ -91,6 +92,7 @@ class CommentView(QMainWindow):
         self.post_data = None
         self.comments = []
 
+        # Set up listener for real-time updates
         self.listener = FirestoreListener()
         #self.listener.commentAddedSignal.connect(self.on_comment_added)
 
@@ -99,6 +101,7 @@ class CommentView(QMainWindow):
 
         self.init_ui()
 
+        # Subscribe to comment updates
         #if self.post_id:
         #    self.listener.subscribe_to_post_comments(self.post_id)
 
@@ -109,19 +112,19 @@ class CommentView(QMainWindow):
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
 
-
+        # If we have post data, display the post first
         if self.post_data:
-            # original post
+            # Display the original post
             post_widget = PostWidget(self.post_data, hide_buttons=True)
             post_widget.setMaximumHeight(400)
             main_layout.addWidget(post_widget)
 
-            # scrollable comments section
+            # Add a label for comments section
             comments_label = QLabel(f"Comments ({len(self.comments)})")
             comments_label.setFont(QFont("Wix Madefor Text", 14, QFont.Bold))
             main_layout.addWidget(comments_label)
 
-
+            # Add scrollable comments section
             comments_scroll = QScrollArea()
             comments_scroll.setWidgetResizable(True)
             comments_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -129,7 +132,7 @@ class CommentView(QMainWindow):
             comments_container = QWidget()
             self.comments_layout = QVBoxLayout(comments_container)
 
-
+            # Add all comments
             for comment in self.comments:
                 comment_widget = CommentWidget(comment)
                 self.comments_layout.addWidget(comment_widget)
@@ -138,16 +141,16 @@ class CommentView(QMainWindow):
             comments_scroll.setWidget(comments_container)
             main_layout.addWidget(comments_scroll)
 
-            # input
+            # Add comment input section
             comment_input_section = self.create_comment_input()
             main_layout.addWidget(comment_input_section)
         else:
-            # error
+            # If no post data, show message
             no_post_label = QLabel("Post not found or no comments available")
             no_post_label.setAlignment(Qt.AlignCenter)
             main_layout.addWidget(no_post_label)
 
-        # back
+        # Back button
         back_button = QPushButton("Back to Feed")
         back_button.clicked.connect(self.go_back)
         main_layout.addWidget(back_button)
@@ -211,20 +214,24 @@ class CommentView(QMainWindow):
 
         #if success:
         #    self.comment_edit.clear()
-        #
+        #    # Comment will be added through the listener
 
     def on_comment_added(self, comment_data):
         if comment_data.postId != self.post_id:
             return
 
+        # Update comment count on post if available
         if self.post_data:
             self.post_data.commentsCount = (self.post_data.commentsCount or 0) + 1
 
+        # Add to local comments list
         self.comments.append(comment_data)
 
+        # Add comment widget to UI
         comment_widget = CommentWidget(comment_data)
         self.comments_layout.insertWidget(self.comments_layout.count() - 1, comment_widget)
 
+        # Update comments count label if it exists
         for i in range(self.centralWidget().layout().count()):
             widget = self.centralWidget().layout().itemAt(i).widget()
             if isinstance(widget, QLabel) and widget.text().startswith("Comments ("):

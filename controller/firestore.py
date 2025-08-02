@@ -3,8 +3,8 @@ from builtins import bool
 from datetime import datetime
 
 import requests
-from PyQt5.QtCore import pyqtSignal, QObject
-from PyQt5.QtWidgets import QMessageBox
+from PySide6.QtCore import Signal, QObject
+from PySide6.QtWidgets import QMessageBox
 from google.cloud import firestore
 from google.cloud.firestore_v1 import Query, SERVER_TIMESTAMP
 
@@ -134,7 +134,7 @@ def fetch_user_posts(userId):
 
 def fetch_user_info(userId):
     if userId in user_info_cache:
-        print("Cache hit for userId:", userId)
+        #print("Cache hit for userId:", userId)
         return user_info_cache[userId]
     doc_ref = db.collection("userdata").document(userId)
     doc = doc_ref.get()
@@ -362,10 +362,10 @@ def create_user_profile(user_id, profile_data):
 
 
 class FirestoreListener(QObject):
-    newPostsSignal = pyqtSignal(PostData)
-    likeUpdatedSignal = pyqtSignal(str, int, bool)
-    deleteSignal = pyqtSignal(str)
-    removeFromStoreSignal = pyqtSignal(str)
+    newPostsSignal = Signal(PostData)
+    likeUpdatedSignal = Signal(str, int, bool)
+    deleteSignal = Signal(str)
+    removeFromStoreSignal = Signal(str)
 
 
     def __init__(self):

@@ -1,6 +1,6 @@
-from PyQt5.QtCore import QSize, Qt, QPropertyAnimation, QEasingCurve, QTimer
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QPushButton
+from PySide6.QtCore import QSize, Qt, QPropertyAnimation, QEasingCurve, QTimer
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QPushButton
 
 
 class PostButton(QPushButton):

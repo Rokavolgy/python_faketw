@@ -1,6 +1,6 @@
 import os
 from typing import List
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
     QVBoxLayout,
@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QSizePolicy,
 )
-from PyQt5.QtGui import QFont, QIcon
-from PyQt5.QtCore import pyqtSignal, Qt, QThreadPool
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtCore import Signal, Qt, QThreadPool
 from datetime import datetime
 
 from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
@@ -25,7 +25,7 @@ from modal.post import PostData
 
 
 class ClickableLabel(QLabel):
-    clicked = pyqtSignal(str)
+    clicked = Signal(str)
 
     def __init__(self, userId=None):
         super().__init__()
@@ -40,8 +40,8 @@ class ClickableLabel(QLabel):
 
 
 class PostsWindow(QMainWindow):
-    profileSwitchRequested = pyqtSignal(str)
-    commentSwitchRequested = pyqtSignal(str)
+    profileSwitchRequested = Signal(str)
+    commentSwitchRequested = Signal(str)
 
     def __init__(self, posts_data: List[PostData]):
         super().__init__()
@@ -178,10 +178,10 @@ class PostsWindow(QMainWindow):
 
 
 class PostWidget(QWidget):
-    profileClicked = pyqtSignal(str)  # PostWindow
-    likeClicked = pyqtSignal(str)  # FirestoreListener
-    commentClicked = pyqtSignal(str)  # Nothing
-    deleteClicked = pyqtSignal(str)  # FirestoreListener
+    profileClicked = Signal(str)  # PostWindow
+    likeClicked = Signal(str)  # FirestoreListener
+    commentClicked = Signal(str)  # Nothing
+    deleteClicked = Signal(str)  # FirestoreListener
 
     def __init__(self, post_data: PostData, hide_buttons=False):
         super().__init__()

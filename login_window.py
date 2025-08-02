@@ -1,7 +1,7 @@
 import sys
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
@@ -17,8 +17,8 @@ from controller.firestore import login_user
 
 
 class LoginWindow(QMainWindow):
-    loginSuccessful = pyqtSignal()
-    signupRequested = pyqtSignal()
+    loginSuccessful = Signal()
+    signupRequested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -75,9 +75,9 @@ class LoginWindow(QMainWindow):
         form_layout.addWidget(self.password_edit)
 
         # belepes
-        login_button = QPushButton("Login")
-        login_button.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
-        login_button.setStyleSheet(
+        self.login_button = QPushButton("Login")
+        self.login_button.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
+        self.login_button.setStyleSheet(
             """
             QPushButton {
                 background-color: #1a73e8;
@@ -90,8 +90,8 @@ class LoginWindow(QMainWindow):
             }
         """
         )
-        login_button.clicked.connect(self.authenticate_user)
-        form_layout.addWidget(login_button)
+        self.login_button.clicked.connect(self.authenticate_user)
+        form_layout.addWidget(self.login_button)
 
         # Regisztráció
         signup_layout = QHBoxLayout()
@@ -131,12 +131,14 @@ class LoginWindow(QMainWindow):
             success, user_data = login_user(username, password)
 
             if success:
+
                 self.loginSuccessful.emit()
                 self.close()
             else:
                 QMessageBox.warning(
                     self, "Login Failed", "Invalid username or password"
                 )
+            self.login_button.setText("Login")
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Invalid username or password")

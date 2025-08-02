@@ -1,6 +1,6 @@
 import os
-from PyQt5.QtCore import QRunnable, pyqtSlot
-from PyQt5.QtGui import QPixmap
+from PySide6.QtCore import QRunnable, Slot
+from PySide6.QtGui import QPixmap
 from io import BytesIO
 import requests
 
@@ -15,7 +15,7 @@ class ImageLoaderTask(QRunnable):
         self.save_folder = save_folder
         self.only_cache_file = only_cache_file
 
-    @pyqtSlot()
+    @Slot()
     def run(self):
         try:
             if self.only_cache_file:
@@ -24,7 +24,7 @@ class ImageLoaderTask(QRunnable):
                     pixmap = QPixmap(file_name)
                     if not pixmap.isNull():
                         ImageLoaderTask.cache[self.image_url] = pixmap
-                        self.callback(file_name)
+                        self.callback(pixmap)
                         return
                 else:
                     self.callback(None)
