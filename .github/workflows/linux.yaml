@@ -24,7 +24,7 @@ jobs:
           python-version: '3.12'
           architecture: 'x64'
           cache: 'pip'
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements_linux.txt
 
       - name: Qt GUI with PySide6
         uses: Nuitka/Nuitka-Action@main
