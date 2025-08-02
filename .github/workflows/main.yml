@@ -37,7 +37,7 @@ jobs:
           output-dir: 'build'
           msvc: latest
           windows-console-mode: disable
-          include-data-dir: res
+          include-data-dir: res=res
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
