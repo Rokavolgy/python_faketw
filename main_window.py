@@ -21,8 +21,8 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
-        font_id = QFontDatabase.addApplicationFont("./fonts/WixMadeforText-Regular.ttf")
-        font_id = QFontDatabase.addApplicationFont("./fonts/WixMadeforText-Bold.ttf")
+        font_id = QFontDatabase.addApplicationFont("res/fonts/WixMadeforText-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont("res/fonts/WixMadeforText-Bold.ttf")
 
         if font_id != -1:
             font_families = QFontDatabase.applicationFontFamilies(font_id)

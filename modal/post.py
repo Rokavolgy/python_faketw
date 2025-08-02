@@ -1,14 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from time import gmtime
+from datetime import datetime
 from typing import List, Optional
 
-import google.cloud.firestore_v1
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
-from nbclient.client import timestamp
 
-from modal.user import ProfileData
 from controller.user_session import UserSession
+from modal.user import ProfileData
+
 
 @dataclass
 class PostData:

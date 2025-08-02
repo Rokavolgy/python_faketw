@@ -1,4 +1,5 @@
-import os
+
+import platform
 from typing import List
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -13,7 +14,12 @@ from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Signal, Qt, QThreadPool
 from datetime import datetime
 
-from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
+if platform.system() == "Windows":
+    from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
+else:
+    WindowsToaster = None
+    Toast = None
+    ToastDisplayImage = None
 
 from controller.image_loader_task import ImageLoaderTask
 from controller.firestore import toggle_post_like, FirestoreListener
@@ -48,7 +54,10 @@ class PostsWindow(QMainWindow):
 
         self.posts_layout = None
         self.posts_data = posts_data
-        self.toaster = WindowsToaster("Fwitter")
+        if platform.system() == "Windows":
+            self.toaster = WindowsToaster("Fwitter")
+        else:
+            self.toaster = None
         self.thread_pool = QThreadPool()
         self.listener = FirestoreListener()
         self.listener.newPostsSignal.connect(self.on_post_notification)
@@ -151,7 +160,13 @@ class PostsWindow(QMainWindow):
         if not UserSession().user_id == post_data.userId:
             print("értesítés kapva: új poszt")
             self.toast.text_fields =["New Post", "New post from " + post_data.userName]
-            self.toaster.show_toast(self.toast)
+            if self.toaster:
+                if post_data.mediaUrls:
+                    image_url = Constants.STORAGE_URL + post_data.mediaUrls[0]
+                    self.toast.display_image = ToastDisplayImage(image_url)
+                else:
+                    self.toast.display_image = None
+                self.toaster.show_toast(self.toast)
         # új widget mint an onpostcreated ben
         post_widget = PostWidget(post_data)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
@@ -165,7 +180,6 @@ class PostsWindow(QMainWindow):
         pass
 
     def on_remove_from_store(self, post_id):
-        print("értesítés kapva a következőről: törölni kell a posztot")
         for i, post in enumerate(self.posts_data):
             if post.id == post_id:
                 print("Poszt törölve.")
@@ -278,9 +292,9 @@ class PostWidget(QWidget):
         stats_layout = QHBoxLayout()
         stats_layout.setAlignment(Qt.AlignCenter)
         heart_filled_icon = (
-            "icons/heart_filled.png"
+            "res/icons/heart_filled.png"
             if self.post_data.likedByCurrentUser
-            else "icons/heart.png"
+            else "res/icons/heart.png"
         )
 
         self.like_button = PostButton(
@@ -293,7 +307,7 @@ class PostWidget(QWidget):
         self.like_button.setFixedHeight(50)
 
         self.comment_button = PostButton(
-            "icons/comment.png",
+            "res/icons/comment.png",
             (
                 f" {self.post_data.commentsCount}"
                 if self.post_data.commentsCount
@@ -305,7 +319,7 @@ class PostWidget(QWidget):
         )
         self.comment_button.setFixedHeight(50)
 
-        self.delete_button = PostButton("icons/delete.png", "Delete")
+        self.delete_button = PostButton("res/icons/delete.png", "Delete")
         self.delete_button.clicked.connect(
             lambda: self.on_delete_clicked(self.post_data.id)
         )
@@ -353,9 +367,9 @@ class PostWidget(QWidget):
         self.username_label.setText(self.post_data.userName)
 
         icon_path = (
-            "icons/heart_filled.png"
+            "res/icons/heart_filled.png"
             if self.post_data.likedByCurrentUser
-            else "icons/heart.png"
+            else "res/icons/heart.png"
         )
         self.like_button.setIcon(QIcon(icon_path))
         self.like_button.setText(

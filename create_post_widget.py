@@ -1,5 +1,7 @@
 import uuid
 
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -10,14 +12,11 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QIcon, QFont
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
 from controller.image_uploader import ImageUploader
 from controller.user_session import UserSession
 from modal.post import PostData
-from datetime import datetime
 
 
 def generate_random_uuid():
