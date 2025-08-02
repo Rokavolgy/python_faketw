@@ -14,7 +14,12 @@ from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Signal, Qt, QThreadPool
 from datetime import datetime
 
-from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
+if platform.system() == "Windows":
+    from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
+else:
+    WindowsToaster = None
+    Toast = None
+    ToastDisplayImage = None
 
 from controller.image_loader_task import ImageLoaderTask
 from controller.firestore import toggle_post_like, FirestoreListener
