@@ -165,7 +165,6 @@ class PostsWindow(QMainWindow):
         pass
 
     def on_remove_from_store(self, post_id):
-        print("értesítés kapva a következőről: törölni kell a posztot")
         for i, post in enumerate(self.posts_data):
             if post.id == post_id:
                 print("Poszt törölve.")
@@ -278,9 +277,9 @@ class PostWidget(QWidget):
         stats_layout = QHBoxLayout()
         stats_layout.setAlignment(Qt.AlignCenter)
         heart_filled_icon = (
-            "icons/heart_filled.png"
+            "res/icons/heart_filled.png"
             if self.post_data.likedByCurrentUser
-            else "icons/heart.png"
+            else "res/icons/heart.png"
         )
 
         self.like_button = PostButton(
@@ -293,7 +292,7 @@ class PostWidget(QWidget):
         self.like_button.setFixedHeight(50)
 
         self.comment_button = PostButton(
-            "icons/comment.png",
+            "res/icons/comment.png",
             (
                 f" {self.post_data.commentsCount}"
                 if self.post_data.commentsCount
@@ -305,7 +304,7 @@ class PostWidget(QWidget):
         )
         self.comment_button.setFixedHeight(50)
 
-        self.delete_button = PostButton("icons/delete.png", "Delete")
+        self.delete_button = PostButton("res/icons/delete.png", "Delete")
         self.delete_button.clicked.connect(
             lambda: self.on_delete_clicked(self.post_data.id)
         )
@@ -353,9 +352,9 @@ class PostWidget(QWidget):
         self.username_label.setText(self.post_data.userName)
 
         icon_path = (
-            "icons/heart_filled.png"
+            "res/icons/heart_filled.png"
             if self.post_data.likedByCurrentUser
-            else "icons/heart.png"
+            else "res/icons/heart.png"
         )
         self.like_button.setIcon(QIcon(icon_path))
         self.like_button.setText(

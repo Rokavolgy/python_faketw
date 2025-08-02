@@ -33,7 +33,7 @@ class LoginWindow(QMainWindow):
         # app logo ha olyan kedve lenne hogy betölti
         logo_layout = QHBoxLayout()
         logo_label = QLabel()
-        logo_pixmap = QPixmap("./icons/icon.jpg")
+        logo_pixmap = QPixmap("res/icons/icon.jpg")
         if not logo_pixmap.isNull():
             logo_label.setPixmap(
                 logo_pixmap.scaledToWidth(150, Qt.SmoothTransformation)
