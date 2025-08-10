@@ -1,6 +1,8 @@
-
 import platform
-from typing import List
+from datetime import datetime
+
+from PySide6.QtCore import Signal, Qt, QThreadPool
+from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
@@ -10,9 +12,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
 )
-from PySide6.QtGui import QFont, QIcon
-from PySide6.QtCore import Signal, Qt, QThreadPool
-from datetime import datetime
 
 if platform.system() == "Windows":
     from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
@@ -30,6 +29,24 @@ from modal.constants import Constants
 from modal.post import PostData
 
 
+class IconCache:
+    """Static cache for commonly used icons"""
+    _icons = {}
+
+    @classmethod
+    def get_icon(cls, icon_path: str) -> QIcon:
+        if icon_path not in cls._icons:
+            cls._icons[icon_path] = QIcon(icon_path)
+            print(f"Icon loaded: {icon_path}")
+        return cls._icons[icon_path]
+
+    @classmethod
+    def get_pixmap(cls, icon_path: str) -> QPixmap:
+        if icon_path not in cls._icons:
+            cls._icons[icon_path] = QPixmap(icon_path)
+        return cls._icons[icon_path]
+
+
 class ClickableLabel(QLabel):
     clicked = Signal(str)
 
@@ -45,15 +62,31 @@ class ClickableLabel(QLabel):
         super().mousePressEvent(event)
 
 
+class ClickableImageLabel(QLabel):
+    clicked = Signal(str)
+
+    def __init__(self, image_url=None):
+        super().__init__()
+        self.image_url = image_url
+
+    def mousePressEvent(self, event):
+        if self.image_url:
+            self.clicked.emit(self.image_url)
+        else:
+            self.clicked.emit("")
+        super().mousePressEvent(event)
+
+
 class PostsWindow(QMainWindow):
     profileSwitchRequested = Signal(str)
     commentSwitchRequested = Signal(str)
+    initialFetchComplete = Signal(bool)
 
-    def __init__(self, posts_data: List[PostData]):
+    def __init__(self):
         super().__init__()
-
+        self.loading_label = None
         self.posts_layout = None
-        self.posts_data = posts_data
+        self.posts_data = []
         if platform.system() == "Windows":
             self.toaster = WindowsToaster("Fwitter")
         else:
@@ -63,14 +96,11 @@ class PostsWindow(QMainWindow):
         self.listener.newPostsSignal.connect(self.on_post_notification)
         self.listener.likeUpdatedSignal.connect(self.on_post_like)
         self.listener.removeFromStoreSignal.connect(self.on_remove_from_store)
+        self.listener.initialPostsLoadedSignal.connect(self.on_initial_fetch_complete)
         self.init_ui()
 
 
-
         self.listener.subscribe_to_new_posts()
-
-
-
 
     def init_ui(self):
         self.setWindowTitle("Posts Viewer")
@@ -117,6 +147,11 @@ class PostsWindow(QMainWindow):
 
         self.setCentralWidget(main_widget)
 
+        self.initial_fetch_done = False
+        self.loading_label = QLabel("Loading posts...")
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        self.posts_layout.addWidget(self.loading_label)
+
     def add_post_widget(self, post: PostData):
         post_widget = PostWidget(post)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
@@ -157,7 +192,8 @@ class PostsWindow(QMainWindow):
                 return
         self.posts_data.insert(0, post_data)
 
-        if not UserSession().user_id == post_data.userId:
+        # Only show notification if initial fetch is done
+        if self.initial_fetch_done and not UserSession().user_id == post_data.userId:
             print("értesítés kapva: új poszt")
             self.toast.text_fields =["New Post", "New post from " + post_data.userName]
             if self.toaster:
@@ -189,6 +225,10 @@ class PostsWindow(QMainWindow):
                 self.posts_layout.removeWidget(post_widget)
                 post_widget.deleteLater()
                 break
+
+    def on_initial_fetch_complete(self):
+        self.initial_fetch_done = True
+        self.loading_label.hide()
 
 
 class PostWidget(QWidget):
@@ -275,7 +315,7 @@ class PostWidget(QWidget):
 
         # kép
         if self.post_data.mediaUrls:
-            self.image_label = QLabel()
+            self.image_label = ClickableLabel()
             self.image_label.setAlignment(Qt.AlignCenter)
             self.image_label.setStyleSheet("margin: 10px 0;")
 
@@ -297,8 +337,9 @@ class PostWidget(QWidget):
             else "res/icons/heart.png"
         )
 
+        # Use cached icons for better performance
         self.like_button = PostButton(
-            heart_filled_icon,
+            IconCache.get_icon(heart_filled_icon),
             f" {self.post_data.likesCount}" if self.post_data.likesCount else " Like",
         )
         self.like_button.clicked.connect(
@@ -307,7 +348,7 @@ class PostWidget(QWidget):
         self.like_button.setFixedHeight(50)
 
         self.comment_button = PostButton(
-            "res/icons/comment.png",
+            IconCache.get_icon("res/icons/comment.png"),
             (
                 f" {self.post_data.commentsCount}"
                 if self.post_data.commentsCount
@@ -319,7 +360,7 @@ class PostWidget(QWidget):
         )
         self.comment_button.setFixedHeight(50)
 
-        self.delete_button = PostButton("res/icons/delete.png", "Delete")
+        self.delete_button = PostButton(IconCache.get_icon("res/icons/delete.png"), "Delete")
         self.delete_button.clicked.connect(
             lambda: self.on_delete_clicked(self.post_data.id)
         )
@@ -340,6 +381,7 @@ class PostWidget(QWidget):
         main_layout.addWidget(self.separator)
 
         self.post_data_old = self.post_data
+
 
     def on_profile_clicked(self, userId):
         self.profileClicked.emit(userId)
@@ -371,7 +413,8 @@ class PostWidget(QWidget):
             if self.post_data.likedByCurrentUser
             else "res/icons/heart.png"
         )
-        self.like_button.setIcon(QIcon(icon_path))
+        # Use cached icon instead of creating new QIcon
+        self.like_button.setIcon(IconCache.get_icon(icon_path))
         self.like_button.setText(
             f" {self.post_data.likesCount}" if self.post_data.likesCount else " Like"
         )
@@ -393,3 +436,21 @@ class PostWidget(QWidget):
                     lambda pixmap: self.update_image(self.profile_pic, pixmap, 40, 40),
                 )
                 self.thread_pool.start(task)
+
+    def cleanup_and_delete(self):
+        """
+        Safely remove this widget from its parent/layout and schedule for deletion.
+        """
+        parent = self.parentWidget()
+        if parent is not None:
+            layout = parent.layout()
+            if layout is not None:
+                layout.removeWidget(self)
+        try:
+            self.delete_button.clicked.disconnect()
+            self.like_button.clicked.disconnect()
+            self.comment_button.clicked.disconnect()
+        except Exception:
+            pass
+        self.setParent(None)
+        self.deleteLater()

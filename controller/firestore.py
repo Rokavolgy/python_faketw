@@ -6,11 +6,10 @@ import requests
 from PySide6.QtCore import Signal, QObject
 from PySide6.QtWidgets import QMessageBox
 from google.cloud import firestore
-from google.cloud.firestore_v1 import Query, SERVER_TIMESTAMP
-
-from requests.exceptions import HTTPError
-from google.oauth2.credentials import Credentials
 from google.cloud.firestore import Client, Increment
+from google.cloud.firestore_v1 import Query, SERVER_TIMESTAMP
+from google.oauth2.credentials import Credentials
+from requests.exceptions import HTTPError
 
 from controller.user_session import UserSession
 from modal import post
@@ -365,18 +364,21 @@ class FirestoreListener(QObject):
     newPostsSignal = Signal(PostData)
     likeUpdatedSignal = Signal(str, int, bool)
     deleteSignal = Signal(str)
+    initialPostsLoadedSignal = Signal(bool)
     removeFromStoreSignal = Signal(str)
-
 
     def __init__(self):
         super().__init__()
         self._post_watch = None
         self._likes_watch = None
+        self._initial_posts_loaded = False
+
         self.deleteSignal.connect(self.delete_post_2)
 
     def subscribe_to_new_posts(self):
+        self._initial_posts_loaded = False
         def on_snapshot(snapshot, changes, read_time):
-            post_data = None
+            added_posts = []
             for change in changes:
                 if change.type.name in ["ADDED", "MODIFIED"]:
                     post_dict = change.document.to_dict()
@@ -392,12 +394,20 @@ class FirestoreListener(QObject):
                     else:
                         print(f"User data not found for userId: {user_id}")
 
+                    if not self._initial_posts_loaded and change.type.name == "ADDED":
+                        added_posts.append(post_data)
+                    elif self._initial_posts_loaded:
+                        self.newPostsSignal.emit(post_data)
 
                 if change.type.name == "REMOVED":
                     post_id = change.document.id
                     self.removeFromStoreSignal.emit(post_id)
-                if post_data is not None:
+
+            if not self._initial_posts_loaded and added_posts:
+                for post_data in added_posts:
                     self.newPostsSignal.emit(post_data)
+                self.initial_posts_loaded = True
+                self.initialPostsLoadedSignal.emit(True)
 
         post_ref = db.collection("posts").order_by(
             field_path="timestamp", direction=Query.DESCENDING

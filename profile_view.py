@@ -1,3 +1,7 @@
+from datetime import datetime
+
+from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
@@ -7,12 +11,9 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QPushButton,
 )
-from PySide6.QtGui import QFont
-from PySide6.QtCore import Qt, QThreadPool
-from datetime import datetime
 
-from controller.image_loader_task import ImageLoaderTask
 from controller.firestore import fetch_user_info, fetch_posts_and_user_info, FirestoreListener
+from controller.image_loader_task import ImageLoaderTask
 from controller.user_session import UserSession
 from modal.constants import Constants
 from modal.user import ProfileData
@@ -281,6 +282,15 @@ class ProfileView(QMainWindow):
         if self.parent_window and hasattr(self.parent_window, "stacked_widget"):
             self.parent_window.stacked_widget.setCurrentIndex(0)
             self.parent_window.stacked_widget.removeWidget(self)
+            self.listener.newPostsSignal.disconnect(self.on_post_notification)
+            self.listener.removeFromStoreSignal.disconnect(self.on_remove_from_store)
+            for i in reversed(range(self.posts_layout.count())):
+                widget = self.posts_layout.itemAt(i).widget()
+                if widget is not None and isinstance(widget, PostWidget):
+                    widget.cleanup_and_delete()
+                    self.posts_layout.removeWidget(widget)
+            self.user_posts = []
+
         else:
 
             assert "the previous widget doesnt exist."

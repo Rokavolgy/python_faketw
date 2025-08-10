@@ -6,9 +6,14 @@ from PySide6.QtWidgets import QPushButton
 class PostButton(QPushButton):
     """Custom button with animation for likes and comments"""
 
-    def __init__(self, icon_path, text, parent=None):
+    def __init__(self, icon_source, text, parent=None):
         super().__init__(text, parent)
-        self.setIcon(QIcon(icon_path))
+
+        if isinstance(icon_source, QIcon):
+            self.setIcon(icon_source)
+        else:
+            self.setIcon(QIcon(icon_source))
+
         self.setIconSize(QSize(20, 20))
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(

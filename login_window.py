@@ -1,4 +1,5 @@
 import sys
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
@@ -140,8 +141,8 @@ class LoginWindow(QMainWindow):
                 )
             self.login_button.setText("Login")
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Invalid username or password")
+        except Exception:
+            QMessageBox.critical(self, "Error", "Invalid username or password")
 
 
 if __name__ == "__main__":

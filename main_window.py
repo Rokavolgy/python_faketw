@@ -3,12 +3,11 @@ import sys
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
-from controller.firestore import fetch_posts_and_user_info
+from comment_view import CommentView
 from login_window import LoginWindow
 from post_widget import PostsWindow
 from profile_view import ProfileView
 from signup_window import SignupWindow
-from comment_view import CommentView
 
 
 class MainWindow(QMainWindow):
@@ -60,10 +59,7 @@ class MainWindow(QMainWindow):
 
     def init_views(self):
 
-        posts_list = fetch_posts_and_user_info()
-
-
-        self.posts_view = PostsWindow(posts_list)
+        self.posts_view = PostsWindow()
         self.posts_view.profileSwitchRequested.connect(self.show_profile_view)
         self.posts_view.commentSwitchRequested.connect(self.show_comment_view)
         self.stacked_widget.addWidget(self.posts_view)
