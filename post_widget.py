@@ -1,7 +1,7 @@
 import platform
 from datetime import datetime
 
-from PySide6.QtCore import Signal, Qt, QThreadPool
+from PySide6.QtCore import Signal, Qt, QThreadPool, QEvent
 from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -11,8 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QScrollArea,
     QSizePolicy,
-    QDialog,
-)
+    QDialog, )
 
 if platform.system() == "Windows":
     from windows_toasts import WindowsToaster, Toast, ToastDisplayImage
@@ -68,22 +67,17 @@ class ClickableLabel(QLabel):
 
 
 class ClickableImageLabel(QLabel):
-    clicked = Signal(str)
+    clicked = Signal(str, str)
 
-    def __init__(self, image_url=None):
+    def __init__(self, image_url=None, username=None):
         super().__init__()
         self.image_url = image_url
+        self.username = username
         self._original_pixmap = None  # will hold full pixmap
-        try:
-            self.setCursor(Qt.PointingHandCursor)
-        except Exception:
-            pass
 
     def mousePressEvent(self, event):
         if self.image_url:
-            self.clicked.emit(self.image_url)
-        else:
-            self.clicked.emit("")
+            self.clicked.emit(self.image_url, self.username)
         super().mousePressEvent(event)
 
 
@@ -126,7 +120,7 @@ class PostsWindow(QMainWindow):
         scroll.setMaximumWidth(1000)
         scroll.setAlignment(
             Qt.AlignHCenter
-        )  # miert nincs kozepen ez a vacak ??????????????????????
+        )  # ysd
 
         container = QWidget()
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -188,21 +182,21 @@ class PostsWindow(QMainWindow):
 
         self.toast = Toast()
         self.toast.text_fields = ['New Post', 'Hello, World!']
-        for i, post in enumerate(self.posts_data):
-            if post.id == post_data.id:
-                print("Poszt már létezik. Adatmódosítás.")
-                self.posts_data[i] = post_data
+        if self.initial_fetch_done:
+            for i, post in enumerate(self.posts_data):
+                if post.id == post_data.id:
+                    print("Poszt már létezik. Adatmódosítás.")
+                    self.posts_data[i] = post_data
 
-                # Adat frissítés
-                post_widget = self.posts_layout.itemAt(i).widget()
-                post_widget.post_data = post_data
-                post_widget.update()
+                    # Adat frissítés
+                    post_widget = self.posts_layout.itemAt(i).widget()
+                    post_widget.post_data = post_data
+                    post_widget.refresh_ui()  # renamed from update()
 
-                print(post_data)
-                return
+                    print(post_data)
+                    return
         self.posts_data.insert(0, post_data)
 
-        # Only show notification if initial fetch is done
         if self.initial_fetch_done and not UserSession().user_id == post_data.userId:
             print("értesítés kapva: új poszt")
             self.toast.text_fields =["New Post", "New post from " + post_data.userName]
@@ -268,13 +262,13 @@ class PostWidget(QWidget):
             print("Warning: label not found")
         if pixmap is None or pixmap.isNull():
             return
-        # Store original pixmap for full-screen / preview usage
         try:
             label._original_pixmap = pixmap
         except Exception:
             pass
+        # Correct parameter order: width first, then height
         scaled_pixmap = pixmap.scaled(
-            height, width, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
         label.setPixmap(scaled_pixmap)
 
@@ -332,12 +326,11 @@ class PostWidget(QWidget):
         # kép
         if self.post_data.mediaUrls:
             image_url = Constants.STORAGE_URL + self.post_data.mediaUrls[0]
-            self.image_label = ClickableImageLabel(image_url)
+            self.image_label = ClickableImageLabel(image_url, username=self.post_data.userName)
             self.image_label.setAlignment(Qt.AlignCenter)
             self.image_label.setStyleSheet("margin: 10px 0;")
             self.image_label.clicked.connect(self.on_image_clicked)
 
-            # Load the image asynchronously
             task = ImageLoaderTask(
                 image_url, lambda pixmap: self.update_image(self.image_label, pixmap)
             )
@@ -354,7 +347,7 @@ class PostWidget(QWidget):
             else "res/icons/heart.png"
         )
 
-        # Use cached icons for better performance
+
         self.like_button = PostButton(
             IconCache.get_icon(heart_filled_icon),
             f" {self.post_data.likesCount}" if self.post_data.likesCount else " Like",
@@ -399,11 +392,10 @@ class PostWidget(QWidget):
 
         self.post_data_old = self.post_data
 
-    def on_image_clicked(self, image_url: str):
-        # Open a preview dialog with the original (unscaled) pixmap if available
+    def on_image_clicked(self, image_url: str, username: str):
         if not hasattr(self, "_image_previews"):
             self._image_previews = []  # keep references
-        preview = ImagePreviewWindow(image_url)
+        preview = ImagePreviewWindow(image_url, username)
         # If we already have the original pixmap cached on the label, set it immediately
         if hasattr(self, "image_label") and getattr(self.image_label, "_original_pixmap", None):
             preview.set_pixmap(self.image_label._original_pixmap)
@@ -435,31 +427,21 @@ class PostWidget(QWidget):
     def on_delete_clicked(self, post_id):
         self.deleteClicked.emit(post_id)
 
-    def update(self):
-        self.update_ui()
-
-    def update_ui(self):
+    def refresh_ui(self):
         self.content_label.setText(self.post_data.content)
-
         self.username_label.setText(self.post_data.userName)
-
         icon_path = (
             "res/icons/heart_filled.png"
             if self.post_data.likedByCurrentUser
             else "res/icons/heart.png"
         )
-        # Use cached icon instead of creating new QIcon
         self.like_button.setIcon(IconCache.get_icon(icon_path))
         self.like_button.setText(
             f" {self.post_data.likesCount}" if self.post_data.likesCount else " Like"
         )
-
         self.comment_button.setText(
-            f" {self.post_data.commentsCount}"
-            if self.post_data.commentsCount
-            else " Comment"
+            f" {self.post_data.commentsCount}" if self.post_data.commentsCount else " Comment"
         )
-
         if (
                 hasattr(self, "post_data_old")
                 and self.post_data_old.userProfilePicUrl != self.post_data.userProfilePicUrl
@@ -471,48 +453,117 @@ class PostWidget(QWidget):
                     lambda pixmap: self.update_image(self.profile_pic, pixmap, 40, 40),
                 )
                 self.thread_pool.start(task)
-
-    def cleanup_and_delete(self):
-        """
-        Safely remove this widget from its parent/layout and schedule for deletion.
-        """
-        parent = self.parentWidget()
-        if parent is not None:
-            layout = parent.layout()
-            if layout is not None:
-                layout.removeWidget(self)
-        try:
-            self.delete_button.clicked.disconnect()
-            self.like_button.clicked.disconnect()
-            self.comment_button.clicked.disconnect()
-        except Exception:
-            pass
-        self.setParent(None)
-        self.deleteLater()
+        self.post_data_old = self.post_data
 
 
 class ImagePreviewWindow(QDialog):
-    def __init__(self, image_url: str):
+    def __init__(self, image_url: str, user_name: str):
         super().__init__()
-        self.setWindowTitle("Image Preview")
+        self.setWindowTitle(user_name + "'s image")
         self.resize(800, 600)
+        self.setWindowFlags(Qt.WindowType.Window)
         self.image_url = image_url
         self.original_pixmap = None
+        self.zoom_factor = 1.0  # Start zoomed out
+        self.dragging = False
+        self.last_mouse_position = None
+
         layout = QVBoxLayout(self)
+        self.scroll_area = QScrollArea(self)
+
+        # the qt moment where you have to disable the scrollbars 5 times
+        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.horizontalScrollBar().setEnabled(False)
+        self.scroll_area.verticalScrollBar().setEnabled(False)
+
         self.image_label = QLabel("Loading image...")
         self.image_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.image_label)
+        self.scroll_area.setWidget(self.image_label)
+
+        self.scroll_area.viewport().installEventFilter(self)
+        layout.addWidget(self.scroll_area)
 
     def set_pixmap(self, pixmap: QPixmap):
-        # Cache original pixmap for future resizes
         if pixmap and not pixmap.isNull():
+            # compute initial zoom to fit the viewport
+            size = pixmap.size()
+            vp = self.scroll_area.viewport().size()
+            if size.width() > 0 and size.height() > 0:
+                fit_ratio = min(vp.width() / size.width(), vp.height() / size.height(), 1.0)
+                self.zoom_factor = fit_ratio
+            else:
+                self.zoom_factor = 1.0
             self.original_pixmap = pixmap
-            scaled = pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.image_label.setPixmap(scaled)
-            self.image_label.setText("")
+            self._apply_scaled_pixmap()
 
-    def resizeEvent(self, event):
+    def _apply_scaled_pixmap(self):
         if self.original_pixmap and not self.original_pixmap.isNull():
-            scaled = self.original_pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            scaled = self.original_pixmap.scaled(
+                self.original_pixmap.width() * self.zoom_factor,
+                self.original_pixmap.height() * self.zoom_factor,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
             self.image_label.setPixmap(scaled)
-        super().resizeEvent(event)
+            # ensure label resizes to pixmap so scrollbars work xd
+            self.image_label.resize(scaled.size())
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel:
+            self.wheelEvent(event)
+            return True
+        return False
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self.zoom_factor *= 1.1
+        elif delta < 0:
+            self.zoom_factor /= 1.1
+
+        self.zoom_factor = max(0.1,
+                               min(self.zoom_factor, 3.5))  # zooming in too much causes high memory usage and giga lag
+        self._apply_scaled_pixmap()
+        event.ignore()  # ignore the event to prevent scrolling
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = True
+            self.last_mouse_position = event.pos()
+
+    def mouseMoveEvent(self, event):
+        if self.dragging and self.last_mouse_position:
+            delta = event.pos() - self.last_mouse_position
+            hbar = self.scroll_area.horizontalScrollBar()
+            vbar = self.scroll_area.verticalScrollBar()
+            hbar.setValue(hbar.value() - delta.x())
+            vbar.setValue(vbar.value() - delta.y())
+            self.last_mouse_position = event.pos()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = False
+            self.last_mouse_position = None
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.original_pixmap and not self.original_pixmap.isNull():
+            size = self.original_pixmap.size()
+            vp = self.scroll_area.viewport().size()
+            if size.width() > 0 and size.height() > 0:
+                self.zoom_factor = min(vp.width() / size.width(), vp.height() / size.height(), 1.0)
+            else:
+                self.zoom_factor = 1.0
+            self._apply_scaled_pixmap()
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        # clean up references
+        self.image_label.setPixmap(QPixmap())
+        self.original_pixmap = None
+        self.zoom_factor = 1.0
+        self.dragging = False
+        self.last_mouse_position = None
+        self.deleteLater()

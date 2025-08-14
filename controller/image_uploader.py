@@ -1,12 +1,12 @@
+import io
 import os
+import threading
 from datetime import datetime
 
 import requests
-import threading
 from PIL import Image
-import io
-
 from PySide6.QtCore import Signal, QObject
+
 from modal.constants import Constants
 
 
@@ -52,19 +52,23 @@ class ImageUploader:
         quality = 95
         current_size = float("inf")
 
-        while current_size > self.MAX_FILE_SIZE and quality > 50:
-            print("Compressing image with quality:", quality)
+        while current_size > self.MAX_FILE_SIZE and quality > 60:
             output = io.BytesIO()
             img.save(output, format=img_format, quality=quality, optimize=True)
             current_size = output.tell()
             output.seek(0)
 
             if current_size > self.MAX_FILE_SIZE:
-                quality -= 5
+                # faster quality drop if file is still too big
+                if current_size - self.MAX_FILE_SIZE > 320000:
+                    quality -= 15
+                else:
+                    quality -= 5
             else:
                 break
 
         if current_size > self.MAX_FILE_SIZE:
+            print("Reducing image dimensions to fit within size limit")
             reduction_factor = 0.9
             while current_size > self.MAX_FILE_SIZE and reduction_factor > 0.5:
                 new_dimensions = (
