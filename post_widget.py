@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QScrollArea,
     QSizePolicy,
+    QDialog,
 )
 
 if platform.system() == "Windows":
@@ -53,6 +54,10 @@ class ClickableLabel(QLabel):
     def __init__(self, userId=None):
         super().__init__()
         self.userId = userId
+        try:
+            self.setCursor(Qt.PointingHandCursor)
+        except Exception:
+            pass
 
     def mousePressEvent(self, event):
         if self.userId:
@@ -68,6 +73,11 @@ class ClickableImageLabel(QLabel):
     def __init__(self, image_url=None):
         super().__init__()
         self.image_url = image_url
+        self._original_pixmap = None  # will hold full pixmap
+        try:
+            self.setCursor(Qt.PointingHandCursor)
+        except Exception:
+            pass
 
     def mousePressEvent(self, event):
         if self.image_url:
@@ -256,7 +266,13 @@ class PostWidget(QWidget):
     def update_image(self, label, pixmap, height=400, width=300):
         if label is None:
             print("Warning: label not found")
-
+        if pixmap is None or pixmap.isNull():
+            return
+        # Store original pixmap for full-screen / preview usage
+        try:
+            label._original_pixmap = pixmap
+        except Exception:
+            pass
         scaled_pixmap = pixmap.scaled(
             height, width, Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
@@ -315,12 +331,13 @@ class PostWidget(QWidget):
 
         # kép
         if self.post_data.mediaUrls:
-            self.image_label = ClickableLabel()
+            image_url = Constants.STORAGE_URL + self.post_data.mediaUrls[0]
+            self.image_label = ClickableImageLabel(image_url)
             self.image_label.setAlignment(Qt.AlignCenter)
             self.image_label.setStyleSheet("margin: 10px 0;")
+            self.image_label.clicked.connect(self.on_image_clicked)
 
             # Load the image asynchronously
-            image_url = Constants.STORAGE_URL + self.post_data.mediaUrls[0]
             task = ImageLoaderTask(
                 image_url, lambda pixmap: self.update_image(self.image_label, pixmap)
             )
@@ -382,6 +399,24 @@ class PostWidget(QWidget):
 
         self.post_data_old = self.post_data
 
+    def on_image_clicked(self, image_url: str):
+        # Open a preview dialog with the original (unscaled) pixmap if available
+        if not hasattr(self, "_image_previews"):
+            self._image_previews = []  # keep references
+        preview = ImagePreviewWindow(image_url)
+        # If we already have the original pixmap cached on the label, set it immediately
+        if hasattr(self, "image_label") and getattr(self.image_label, "_original_pixmap", None):
+            preview.set_pixmap(self.image_label._original_pixmap)
+        else:
+            # Load (again) to ensure full-size available
+            def _apply(pixmap):
+                if pixmap and not pixmap.isNull():
+                    preview.set_pixmap(pixmap)
+
+            task = ImageLoaderTask(image_url, _apply)
+            self.thread_pool.start(task)
+        preview.show()
+        self._image_previews.append(preview)
 
     def on_profile_clicked(self, userId):
         self.profileClicked.emit(userId)
@@ -454,3 +489,30 @@ class PostWidget(QWidget):
             pass
         self.setParent(None)
         self.deleteLater()
+
+
+class ImagePreviewWindow(QDialog):
+    def __init__(self, image_url: str):
+        super().__init__()
+        self.setWindowTitle("Image Preview")
+        self.resize(800, 600)
+        self.image_url = image_url
+        self.original_pixmap = None
+        layout = QVBoxLayout(self)
+        self.image_label = QLabel("Loading image...")
+        self.image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.image_label)
+
+    def set_pixmap(self, pixmap: QPixmap):
+        # Cache original pixmap for future resizes
+        if pixmap and not pixmap.isNull():
+            self.original_pixmap = pixmap
+            scaled = pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.image_label.setPixmap(scaled)
+            self.image_label.setText("")
+
+    def resizeEvent(self, event):
+        if self.original_pixmap and not self.original_pixmap.isNull():
+            scaled = self.original_pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.image_label.setPixmap(scaled)
+        super().resizeEvent(event)
