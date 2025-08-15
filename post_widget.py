@@ -88,7 +88,11 @@ class PostsWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        # time log
+        # print("PostsWindow init started")
+        self.time = datetime.now()
         self.loading_label = None
+        self.initial_load_count = 0
         self.posts_layout = None
         self.posts_data = []
         if platform.system() == "Windows":
@@ -102,9 +106,12 @@ class PostsWindow(QMainWindow):
         self.listener.removeFromStoreSignal.connect(self.on_remove_from_store)
         self.listener.initialPostsLoadedSignal.connect(self.on_initial_fetch_complete)
         self.init_ui()
-
+        #print("PostsWindow init done time: " + str(datetime.now() - self.time))
 
         self.listener.subscribe_to_new_posts()
+        # print("PostsWindow subscribed to new posts" + str(datetime.now() - self.time))
+        self.preload_while_fetching()
+        #print("PostsWindow preload done time: " + str(datetime.now() - self.time))
 
     def init_ui(self):
         self.setWindowTitle("Posts Viewer")
@@ -125,14 +132,6 @@ class PostsWindow(QMainWindow):
         container = QWidget()
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.posts_layout = QVBoxLayout(container)
-
-
-        for post in self.posts_data:
-            post_widget = PostWidget(post)
-            post_widget.profileClicked.connect(self.switch_to_profile_mode)
-            post_widget.commentClicked.connect(self.switch_to_comment_mode)
-            post_widget.deleteClicked.connect(self.listener.delete_post_2)
-            self.posts_layout.addWidget(post_widget, stretch=1)
 
         self.posts_layout.addStretch()
 
@@ -156,6 +155,13 @@ class PostsWindow(QMainWindow):
         self.loading_label.setAlignment(Qt.AlignCenter)
         self.posts_layout.addWidget(self.loading_label)
 
+    def preload_while_fetching(self):
+        IconCache.get_icon("res/icons/heart.png")
+        IconCache.get_icon("res/icons/heart_filled.png")
+        IconCache.get_icon("res/icons/comment.png")
+        IconCache.get_icon("res/icons/delete.png")
+
+
     def add_post_widget(self, post: PostData):
         post_widget = PostWidget(post)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
@@ -178,7 +184,7 @@ class PostsWindow(QMainWindow):
 
 
     def on_post_notification(self, post_data: PostData):
-        # keresés hogy van-e
+        # search
 
         self.toast = Toast()
         self.toast.text_fields = ['New Post', 'Hello, World!']
@@ -208,6 +214,9 @@ class PostsWindow(QMainWindow):
                     self.toast.display_image = None
                 self.toaster.show_toast(self.toast)
         # új widget mint an onpostcreated ben
+        #print("Widget create time: " + str(datetime.now() - self.time))
+
+
         post_widget = PostWidget(post_data)
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
         post_widget.commentClicked.connect(self.switch_to_comment_mode)
@@ -232,6 +241,8 @@ class PostsWindow(QMainWindow):
 
     def on_initial_fetch_complete(self):
         self.initial_fetch_done = True
+        self.listener.initialPostsLoadedSignal.disconnect()
+        #print("Initial fetch complete, removing loading label time: " + str(datetime.now() - self.time))
         self.loading_label.hide()
 
 
