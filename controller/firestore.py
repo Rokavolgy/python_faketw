@@ -372,14 +372,14 @@ class FirestoreListener(QObject):
         self._post_watch = None
         self._likes_watch = None
         self._initial_posts_loaded = False
+        self._time = datetime.now()
 
         self.deleteSignal.connect(self.delete_post_2)
 
     def subscribe_to_new_posts(self):
         self._initial_posts_loaded = False
         def on_snapshot(snapshot, changes, read_time):
-            added_posts = []
-            for change in changes:
+            for change in reversed(changes):
                 if change.type.name in ["ADDED", "MODIFIED"]:
                     post_dict = change.document.to_dict()
                     post_dict["id"] = change.document.id
@@ -395,7 +395,7 @@ class FirestoreListener(QObject):
                         print(f"User data not found for userId: {user_id}")
 
                     if not self._initial_posts_loaded and change.type.name == "ADDED":
-                        added_posts.append(post_data)
+                        self.newPostsSignal.emit(post_data)
                     elif self._initial_posts_loaded:
                         self.newPostsSignal.emit(post_data)
 
@@ -403,12 +403,9 @@ class FirestoreListener(QObject):
                     post_id = change.document.id
                     self.removeFromStoreSignal.emit(post_id)
 
-            if not self._initial_posts_loaded and added_posts:
-                for post_data in added_posts:
-                    self.newPostsSignal.emit(post_data)
-                self.initial_posts_loaded = True
+            if not self._initial_posts_loaded:
+                self._initial_posts_loaded = True
                 self.initialPostsLoadedSignal.emit(True)
-
         post_ref = db.collection("posts").order_by(
             field_path="timestamp", direction=Query.DESCENDING
         ).limit(80)

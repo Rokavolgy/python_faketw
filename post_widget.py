@@ -94,6 +94,7 @@ class PostsWindow(QMainWindow):
         self.loading_label = None
         self.initial_load_count = 0
         self.posts_layout = None
+        self.scroll = None
         self.posts_data = []
         if platform.system() == "Windows":
             self.toaster = WindowsToaster("Fwitter")
@@ -121,11 +122,11 @@ class PostsWindow(QMainWindow):
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        scroll.setMaximumWidth(1000)
-        scroll.setAlignment(
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.scroll.setMaximumWidth(1000)
+        self.scroll.setAlignment(
             Qt.AlignHCenter
         )  # ysd
 
@@ -135,9 +136,9 @@ class PostsWindow(QMainWindow):
 
         self.posts_layout.addStretch()
 
-        scroll.setWidget(container)
-
-        main_layout.addWidget(scroll, 1)
+        self.scroll.setWidget(container)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main_layout.addWidget(self.scroll, 1)
 
         self.create_post_widget = CreatePostWidget(
             user_id="current_user_id", user_name="Your Username"
@@ -151,7 +152,7 @@ class PostsWindow(QMainWindow):
         self.setCentralWidget(main_widget)
 
         self.initial_fetch_done = False
-        self.loading_label = QLabel("Loading posts...")
+        self.loading_label = QLabel("Refreshing posts...")
         self.loading_label.setAlignment(Qt.AlignCenter)
         self.posts_layout.addWidget(self.loading_label)
 
@@ -221,7 +222,10 @@ class PostsWindow(QMainWindow):
         post_widget.profileClicked.connect(self.switch_to_profile_mode)
         post_widget.commentClicked.connect(self.switch_to_comment_mode)
         post_widget.deleteClicked.connect(self.listener.delete_post_2)
-        self.posts_layout.insertWidget(0, post_widget)
+        if self.initial_fetch_done:
+            self.posts_layout.insertWidget(0, post_widget)
+        else:
+            self.posts_layout.addWidget(post_widget)
 
     def on_post_like(self):
         #updates elsewhere
@@ -241,10 +245,10 @@ class PostsWindow(QMainWindow):
 
     def on_initial_fetch_complete(self):
         self.initial_fetch_done = True
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.listener.initialPostsLoadedSignal.disconnect()
         #print("Initial fetch complete, removing loading label time: " + str(datetime.now() - self.time))
-        self.loading_label.hide()
-
+        self.loading_label.deleteLater()
 
 class PostWidget(QWidget):
     profileClicked = Signal(str)  # PostWindow
@@ -407,11 +411,9 @@ class PostWidget(QWidget):
         if not hasattr(self, "_image_previews"):
             self._image_previews = []  # keep references
         preview = ImagePreviewWindow(image_url, username)
-        # If we already have the original pixmap cached on the label, set it immediately
         if hasattr(self, "image_label") and getattr(self.image_label, "_original_pixmap", None):
             preview.set_pixmap(self.image_label._original_pixmap)
         else:
-            # Load (again) to ensure full-size available
             def _apply(pixmap):
                 if pixmap and not pixmap.isNull():
                     preview.set_pixmap(pixmap)
