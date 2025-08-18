@@ -1,12 +1,15 @@
+import sys
 import unittest
 from unittest.mock import patch, MagicMock
-from PySide6.QtWidgets import QApplication
+
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-import sys
+from PySide6.QtWidgets import QApplication
 
-from post_widget import PostWidget, ClickableLabel
 from modal.post import PostData
+from widgets.post_widget import PostWidget, ClickableLabel
+
+
 #potentially broken
 
 class TestUI(unittest.TestCase):

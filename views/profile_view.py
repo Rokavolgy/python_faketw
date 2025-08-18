@@ -17,8 +17,8 @@ from controller.image_loader_task import ImageLoaderTask
 from controller.user_session import UserSession
 from modal.constants import Constants
 from modal.user import ProfileData
-from post_widget import PostWidget
-from profile_edit_window import ProfileEditWindow
+from views.profile_edit_window import ProfileEditWindow
+from widgets.post_widget import PostWidget
 
 
 class ProfileView(QMainWindow):

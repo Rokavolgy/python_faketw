@@ -101,8 +101,8 @@ class ImageUploader:
 
         Args:
             image_path: Path to the image file
-            on_success: Signal!!!! self.signals for success (takes image URL as parameter)
-            on_failure: Signal!!!! self.signals for failure (takes error message as parameter)
+            on_success: Signal. self.signals for success (takes image URL as parameter)
+            on_failure: Signal. self.signals for failure (takes error message as parameter)
             compress: Whether to compress the image before uploading only compresses to 512kb!
         """
 
@@ -119,7 +119,7 @@ class ImageUploader:
             response = requests.post(self.UPLOAD_URL, files=files)
 
             if response.status_code == 200:
-                print("Sikeres feltöltés!!!" + str(response.text))
+                print("Uploaded: " + str(response.text))
                 self.signals.success_signal.emit(response.text)
             else:
                 error_msg = f"Server error: {response.status_code}, {response.text}"

@@ -3,11 +3,11 @@ import sys
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
-from comment_view import CommentView
-from login_window import LoginWindow
-from post_widget import PostsWindow
-from profile_view import ProfileView
-from signup_window import SignupWindow
+from views.comment_view import CommentView
+from views.login_window import LoginWindow
+from views.posts_window import PostsWindow
+from views.profile_view import ProfileView
+from views.signup_window import SignupWindow
 
 
 class MainWindow(QMainWindow):

@@ -1,4 +1,5 @@
 import sys
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
@@ -15,8 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from controller.firestore import register_user
-from profile_edit_window import ProfileEditWindow
 from modal.user import ProfileData
+from views.profile_edit_window import ProfileEditWindow
 
 
 class SignupWindow(QMainWindow):

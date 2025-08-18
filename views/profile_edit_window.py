@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from PySide6.QtCore import Qt, Signal, QThreadPool
+from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -13,17 +15,15 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QScrollArea,
 )
-from PySide6.QtGui import QPixmap, QFont
-from PySide6.QtCore import Qt, Signal, QThreadPool
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
+from controller.firestore import update_user_profile, clear_cache, create_user_profile
 from controller.image_loader_task import ImageLoaderTask
 from controller.image_uploader import ImageUploader
 from controller.user_session import UserSession
-from controller.firestore import update_user_profile, clear_cache, create_user_profile
 from modal.constants import Constants
 from modal.user import ProfileData
-from post_widget import ClickableLabel
+from widgets.clickable_labels import ClickableLabel
 
 
 class ProfileEditWindow(QMainWindow):

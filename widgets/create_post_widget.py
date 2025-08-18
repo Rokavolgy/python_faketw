@@ -40,7 +40,7 @@ class CreatePostWidget(QWidget):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        # fejléc
+        # header
         header_label = QLabel("Create New Post")
         header_label.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
         layout.addWidget(header_label)
@@ -96,7 +96,7 @@ class CreatePostWidget(QWidget):
 
     def display_image_preview(self, image_path):
         return
-        # Szétcsúszik tőle sajna :(
+
         # pixmap = QPixmap(image_path)
         # scaled_pixmap = pixmap.scaled(
         #    400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation

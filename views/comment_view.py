@@ -1,15 +1,15 @@
+from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea,
     QPushButton, QTextEdit, QSizePolicy
 )
-from PySide6.QtGui import QFont
-from PySide6.QtCore import Qt, QThreadPool, Signal
 
-from controller.image_loader_task import ImageLoaderTask
 from controller.firestore import FirestoreListener, fetch_post_by_id
+from controller.image_loader_task import ImageLoaderTask
 from controller.user_session import UserSession
 from modal.constants import Constants
-from post_widget import PostWidget
+from widgets.post_widget import PostWidget
 
 
 class CommentWidget(QWidget):
