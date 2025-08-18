@@ -30,12 +30,7 @@ jobs:
         run: |
           sudo apt-get install -y libegl1
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
-          sudo apt-get install -y \
-            libegl1 libxcb-cursor0 libxcb1 libx11-xcb1 libxcb-glx0 libxcb-keysyms1 \
-            libxcb-image0 libxcb-shm0 libxcb-icccm4 libxcb-render-util0 libxcb-xinerama0 \
-            libxcb-randr0 libxcb-shape0 libxcb-sync1 libegl1-mesa libgl1-mesa-glx \
-            libgl1-mesa-dri libfreetype6 libfontconfig1 x11-utils x11-xserver-utils \
-            libxkbcommon-x11-0          
+          sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb-cursor0
           pip install -r requirements_linux.txt
           pip install pytest
 
