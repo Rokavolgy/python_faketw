@@ -7,7 +7,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from modal.post import PostData
-from widgets.post_widget import PostWidget, ClickableLabel
+from widgets.clickable_labels import ClickableLabel
+from widgets.post_widget import PostWidget
 
 
 #potentially broken
