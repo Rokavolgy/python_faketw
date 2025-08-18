@@ -30,9 +30,16 @@ jobs:
         run: |
           sudo apt-get install -y libegl1
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
-          sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb-cursor0
+          sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb-cursor0 x11-tools
           pip install -r requirements_linux.txt
           pip install pytest
+
+      - name: Setup Xvfb
+        run: |
+          sudo apt-get install -y xvfb
+          echo "Xvfb started"
+          sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &
+
 
       - name: Run tests
         run: python -m unittest discover -s tests
