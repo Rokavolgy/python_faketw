@@ -139,7 +139,12 @@ class PostsWindow(QMainWindow):
 
                     print(post_data)
                     return
-        self.posts_data.insert(0, post_data)
+        if self.initial_fetch_done:
+            self.posts_data.insert(0, post_data)
+        else:
+            self.posts_data.append(post_data)
+
+
 
         if self.initial_fetch_done and not UserSession().user_id == post_data.userId:
             print("értesítés kapva: új poszt")
@@ -169,21 +174,18 @@ class PostsWindow(QMainWindow):
         pass
 
     def on_remove_from_store(self, post_id):
-        for i, post in enumerate(self.posts_data):
-            if post.id == post_id:
-                print("Poszt törölve.")
-                del self.posts_data[i]
-
-                post_widget = self.posts_layout.itemAt(i).widget()
-                self.posts_layout.removeWidget(post_widget)
+        for i in range(self.posts_layout.count()):
+            post_widget = self.posts_layout.itemAt(i).widget()
+            if hasattr(post_widget, "post_data") and post_widget.post_data.id == post_id:
                 post_widget.cleanup_and_delete()
+                self.posts_layout.removeWidget(post_widget)
+                print("deletion ", post_id)
+                del self.posts_data[i]
                 break
 
     def on_initial_fetch_complete(self):
         self.initial_fetch_done = True
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.listener.initialPostsLoadedSignal.disconnect()
-        thread_pool = QThreadPool.globalInstance()
-        print(f"Active threads: {thread_pool.activeThreadCount()}")
         # print("Initial fetch complete, removing loading label time: " + str(datetime.now() - self.time))
         self.loading_label.deleteLater()

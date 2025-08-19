@@ -247,6 +247,7 @@ class PostWidget(QWidget):
         self.deleteClicked.emit(post_id)
 
     def refresh_ui(self):
+        print("Refreshing UI for post:", self.post_data.id)
         self.content_label.setText(self.post_data.content)
         self.username_label.setText(self.post_data.userName)
         icon_path = (
@@ -272,12 +273,12 @@ class PostWidget(QWidget):
                     lambda pixmap: self.update_image(self.profile_pic, pixmap, 40, 40),
                 )
                 self.thread_pool.start(task)
-        self.post_data_old = self.post_data
 
     def cleanup_and_delete(self):
         """
         Safely remove this widget from its parent/layout and schedule for deletion.
         """
+        print("Deleting...")
         parent = self.parentWidget()
         if parent is not None:
             layout = parent.layout()
@@ -288,7 +289,18 @@ class PostWidget(QWidget):
             self.like_button.clicked.disconnect()
             self.comment_button.clicked.disconnect()
         except Exception:
+            print("Disconnecting signals failed, maybe already disconnected?")
             pass
+
+        # Explicitly release image resources
+        if self._current_movie:
+            self._current_movie.stop()
+            self._current_movie.deleteLater()
+            self._current_movie = None
+
+        if self._current_buffer:
+            self._current_buffer.close()
+            self._current_buffer = None
+
         self.setParent(None)
         self.deleteLater()
-        self.post_data_old = self.post_data

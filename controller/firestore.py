@@ -394,10 +394,7 @@ class FirestoreListener(QObject):
                     else:
                         print(f"User data not found for userId: {user_id}")
 
-                    if not self._initial_posts_loaded and change.type.name == "ADDED":
-                        self.newPostsSignal.emit(post_data)
-                    elif self._initial_posts_loaded:
-                        self.newPostsSignal.emit(post_data)
+                    self.newPostsSignal.emit(post_data)
 
                 if change.type.name == "REMOVED":
                     post_id = change.document.id
