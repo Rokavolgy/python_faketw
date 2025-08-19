@@ -49,7 +49,12 @@ class PostWidget(QWidget):
         if label is None:
             print("Warning: label not found")
             return
-        if isinstance(pixmap_or_movie, tuple):
+        if isinstance(pixmap_or_movie, QPixmap):
+            scaled_pixmap = pixmap_or_movie.scaled(
+                width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            label.setPixmap(scaled_pixmap)
+        elif isinstance(pixmap_or_movie, tuple):
             if not QThread.currentThread().isMainThread():
                 print("Warning: update_image called from non-main thread, gif will show up as static image")
             if (pixmap_or_movie[0] == "gif_data" and isinstance(pixmap_or_movie[1], bytes)):
@@ -78,15 +83,7 @@ class PostWidget(QWidget):
                 label.setMovie(movie)
                 movie.start()
                 return
-        elif pixmap_or_movie is isinstance(QPixmap):
-            try:
-                label._original_pixmap = pixmap_or_movie
-            except Exception:
-                pass
-            scaled_pixmap = pixmap_or_movie.scaled(
-                width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            label.setPixmap(scaled_pixmap)
+
 
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -222,6 +219,7 @@ class PostWidget(QWidget):
         if hasattr(self, "image_label") and getattr(self.image_label, "_original_pixmap", None):
             preview.set_pixmap(self.image_label._original_pixmap)
         else:
+            # doesnt work
             def _apply(pixmap):
                 if pixmap and not pixmap.isNull():
                     preview.set_pixmap(pixmap)
