@@ -48,6 +48,8 @@ class ImageUploader:
         img_format = os.path.splitext(image_path)[1][1:].upper()
 
         img_format = "WEBP"  # webp lesz és xd
+        if img.format == "GIF":
+            img_format = "GIF"
 
         quality = 95
         current_size = float("inf")
@@ -109,7 +111,7 @@ class ImageUploader:
         def upload_task():
 
             current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
-            file_name = "JPEG_" + current_datetime + ".jpg"
+            file_name = "JPEG_" + current_datetime + ".dat"
             if compress:
                 file_data = self.compress_image(image_path)
                 files = {"file": (file_name, file_data, "image/jpeg")}

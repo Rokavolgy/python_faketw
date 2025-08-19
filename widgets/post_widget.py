@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from PySide6.QtCore import Signal, Qt, QThreadPool
-from PySide6.QtGui import QFont
+from PySide6 import QtCore
+from PySide6.QtCore import Signal, Qt, QThreadPool, QThread, QBuffer
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
@@ -29,7 +30,7 @@ class PostWidget(QWidget):
     def __init__(self, post_data: PostData, hide_buttons=False):
         super().__init__()
         self.post_data = post_data
-        self.thread_pool = QThreadPool()
+        self.thread_pool = QThreadPool.globalInstance()
         self.setMinimumWidth(400)
         self.setMaximumWidth(1000)
         self.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred))
@@ -40,22 +41,52 @@ class PostWidget(QWidget):
         self.post_stats = None
         self.post_image = None
         self.hide_buttons = hide_buttons
+        self._current_movie = None
+        self._current_buffer = None
         self.init_ui()
 
-    def update_image(self, label, pixmap, height=400, width=300):
+    def update_image(self, label, pixmap_or_movie, height=400, width=300):
         if label is None:
             print("Warning: label not found")
-        if pixmap is None or pixmap.isNull():
             return
-        try:
-            label._original_pixmap = pixmap
-        except Exception:
-            pass
-        # Correct parameter order: width first, then height
-        scaled_pixmap = pixmap.scaled(
-            width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        label.setPixmap(scaled_pixmap)
+        if isinstance(pixmap_or_movie, tuple):
+            if not QThread.currentThread().isMainThread():
+                print("Warning: update_image called from non-main thread, gif will show up as static image")
+            if (pixmap_or_movie[0] == "gif_data" and isinstance(pixmap_or_movie[1], bytes)):
+                gif_data = pixmap_or_movie[1]
+                from PySide6.QtGui import QMovie
+                # Create QBuffer and QMovie on main thread
+                buffer = QBuffer()
+                buffer.setData(gif_data)
+                buffer.open(QBuffer.ReadOnly)
+
+                movie = QMovie()
+                movie.setDevice(buffer)
+                if not movie.isValid():
+                    print("Warning: Invalid GIF buffer")
+                    buffer.close()
+                    return
+
+                movie.setScaledSize(QtCore.QSize(width, height))
+                movie.setCacheMode(QMovie.CacheAll)
+                movie.finished.connect(movie.start)
+
+                # Store references to prevent garbage collection
+                self._current_movie = movie
+                self._current_buffer = buffer  # Keep buffer alive
+
+                label.setMovie(movie)
+                movie.start()
+                return
+        elif pixmap_or_movie is isinstance(QPixmap):
+            try:
+                label._original_pixmap = pixmap_or_movie
+            except Exception:
+                pass
+            scaled_pixmap = pixmap_or_movie.scaled(
+                width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            label.setPixmap(scaled_pixmap)
 
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -117,8 +148,15 @@ class PostWidget(QWidget):
             self.image_label.clicked.connect(self.on_image_clicked)
 
             task = ImageLoaderTask(
-                image_url, lambda pixmap: self.update_image(self.image_label, pixmap)
+                image_url, lambda pixmap_or_movie: self.update_image(self.image_label, pixmap_or_movie), allow_gif=True
             )
+
+            # connect to singal for gifs hopefully will change to it lateer
+            def one_time_update(pixmap_or_movie):
+                self.update_image(self.image_label, pixmap_or_movie)
+                task.loaded_gif_signal.disconnect(one_time_update)
+
+            task.loaded_gif_signal.connect(one_time_update)
             self.thread_pool.start(task)
 
             main_layout.addWidget(self.image_label)

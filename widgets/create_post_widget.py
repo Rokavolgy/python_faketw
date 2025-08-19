@@ -86,7 +86,7 @@ class CreatePostWidget(QWidget):
 
     def select_image(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Image", "", "Image Files (*.png *.jpg *.jpeg)"
+            self, "Select Image", "", "Image Files (*.png *.jpg *.jpeg *.gif)"
         )
 
         if file_path:

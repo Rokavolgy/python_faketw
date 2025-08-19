@@ -40,7 +40,7 @@ class PostsWindow(QMainWindow):
             self.toaster = WindowsToaster("Fwitter")
         else:
             self.toaster = None
-        self.thread_pool = QThreadPool()
+        self.thread_pool = QThreadPool().globalInstance()
         self.listener = FirestoreListener()
         self.listener.newPostsSignal.connect(self.on_post_notification)
         self.listener.likeUpdatedSignal.connect(self.on_post_like)
@@ -176,12 +176,14 @@ class PostsWindow(QMainWindow):
 
                 post_widget = self.posts_layout.itemAt(i).widget()
                 self.posts_layout.removeWidget(post_widget)
-                post_widget.deleteLater()
+                post_widget.cleanup_and_delete()
                 break
 
     def on_initial_fetch_complete(self):
         self.initial_fetch_done = True
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.listener.initialPostsLoadedSignal.disconnect()
+        thread_pool = QThreadPool.globalInstance()
+        print(f"Active threads: {thread_pool.activeThreadCount()}")
         # print("Initial fetch complete, removing loading label time: " + str(datetime.now() - self.time))
         self.loading_label.deleteLater()

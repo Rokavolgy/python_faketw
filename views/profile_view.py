@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from controller.firestore import fetch_user_info, fetch_posts_and_user_info, FirestoreListener
 from controller.image_loader_task import ImageLoaderTask
+from controller.profiler import track_execution_time
 from controller.user_session import UserSession
 from modal.constants import Constants
 from modal.user import ProfileData
@@ -44,6 +45,7 @@ class ProfileView(QMainWindow):
 
         self.init_ui()
 
+    @track_execution_time
     def init_ui(self):
         self.setWindowTitle("User Profile")
         self.setMinimumSize(600, 800)
