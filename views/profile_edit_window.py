@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
-from controller.firestore import update_user_profile, clear_cache, create_user_profile
+from controller.firebase_client import clear_cache
 from controller.image_loader_task import ImageLoaderTask
 from controller.image_uploader import ImageUploader
 from controller.user_session import UserSession
@@ -196,10 +196,6 @@ class ProfileEditWindow(QMainWindow):
         """Update profile image in the UI"""
         self.cover_pic_label.setPixmap(pixmap)
 
-    def get_rounded_pixmap(self, pixmap):
-        """Convert a pixmap to a circular shape"""
-        return pixmap
-
     def select_profile_picture(self):
         """Open file dialog to select a new profile picture"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -332,6 +328,9 @@ class ProfileEditWindow(QMainWindow):
 
     def finalize_save(self):
         try:
+            from controller.user_controller import (create_user_profile, update_user_profile)
+
+
             if self.is_registering:
                 success = create_user_profile(UserSession().user_id, self.user_data)
                 if not success:

@@ -1,0 +1,72 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env/
+.env.*
+!.env.example
+
+# Packaging and build output
+build/
+dist/
+*.build/
+*.dist/
+*.onefile-build/
+*.onefile-temp/
+*.egg-info/
+*.whl
+*.exe
+*.dll
+*.pyd
+nuitka-crash-report.xml
+
+# Test, coverage, and type-checker output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pyre/
+
+# Application-generated media, logs, and profiling output
+/cache/
+/logs/
+*.log
+*.log.*
+*.prof
+*.pstats
+*.pickle
+/python_code/
+
+# IDE and editor metadata
+.idea/
+.vscode/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local secrets and credentials
+.env
+*.pem
+*.key
+credentials.json
+service-account*.json

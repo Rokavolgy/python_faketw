@@ -2,9 +2,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 
-from google.cloud.firestore_v1 import SERVER_TIMESTAMP
-
-from controller.user_session import UserSession
 from modal.user import ProfileData
 
 
@@ -24,7 +21,6 @@ class PostData:
 
     @classmethod
     def from_dict(cls, data):
-        user_session = UserSession()
         a = data.get('timestamp',"")
         return cls(
             content=data.get("content", ""),
@@ -34,7 +30,7 @@ class PostData:
             userName=data.get("userName", "Unknown User"),
             id=data.get("id", ""),
             userId=data.get("userId", ""),
-            likedByCurrentUser=user_session.check_if_user_liked(data.get("id", "")),
+            likedByCurrentUser=data.get("likedByCurrentUser", False),
             likesCount=data.get("likesCount", 0),
             timestamp=a.astimezone(tz=None),
             userData=data.get("userData", None),
@@ -42,6 +38,8 @@ class PostData:
 
     @classmethod
     def to_dict(cls, post):
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+
         return {
             "content": post.content,
             "commentsCount": post.commentsCount,

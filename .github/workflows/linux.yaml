@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11'
           architecture: 'x64'
           cache: 'pip'
 
@@ -56,7 +56,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11'
           architecture: 'x64'
           cache: 'pip'
       - run: pip install -r requirements_linux.txt
@@ -64,7 +64,7 @@ jobs:
       - name: Qt GUI with PySide6
         uses: Nuitka/Nuitka-Action@main
         with:
-          nuitka-version: main
+          nuitka-version: develop
           script-name: main_window.py
           mode: standalone
           enable-plugins: pyside6

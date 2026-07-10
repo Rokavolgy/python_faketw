@@ -15,9 +15,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
-from controller.firestore import register_user
+from controller.auth_controller import register_user
 from modal.user import ProfileData
-from views.profile_edit_window import ProfileEditWindow
 
 
 class SignupWindow(QMainWindow):
@@ -160,6 +159,7 @@ class SignupWindow(QMainWindow):
             return
 
         try:
+
             success, _ = register_user(email, password)
 
             if success:
@@ -183,6 +183,8 @@ class SignupWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Registration error: {str(e)}")
 
     def open_profile_edit(self, profile_data):
+        from views.profile_edit_window import ProfileEditWindow
+
         self.profile_edit_window = ProfileEditWindow(profile_data, True)
         self.profile_edit_window.profileCreated.connect(self.forward_profile_created)
 

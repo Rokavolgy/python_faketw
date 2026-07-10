@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import threading
 from datetime import datetime
@@ -9,6 +10,8 @@ from PySide6.QtCore import Signal, QObject
 
 from controller.profiler import track_execution_time
 from modal.constants import Constants
+
+logger = logging.getLogger(__name__)
 
 
 class ImageUploaderSignals(QObject):
@@ -68,17 +71,17 @@ class ImageUploader:
                 quality = min(100, max(quality, 22))
                 if quality < 50:
                     speed = 4
-                    print("Reducing quality to", quality, "and speed to", speed)
+                    logger.debug("Reducing quality to %s and speed to %s", quality, speed)
                 buffer = self.gif_to_avif_buffer(image_path, quality=quality, speed=speed,
                                                  drop_every_second_frame=drop_every_second_frame)
                 if not drop_every_second_frame and quality < 40:
                     quality = quality + 30
                     drop_every_second_frame = True
-                    print("Dropping every second frame to reduce size")
+                    logger.debug("Dropping every second frame to reduce AVIF size")
 
             else:
                 if buffer.getbuffer().nbytes > self.MAX_FILE_SIZE:
-                    print("AVIF (converting from GIF) is still too large after compression, upload unsuccessful")
+                    logger.warning("AVIF converted from GIF is still too large")
                     self.signals.failure_signal.emit("AVIF is too large after compression")
                     raise RuntimeError("AVIF is too large after compression")
                 return buffer
@@ -102,7 +105,7 @@ class ImageUploader:
                 break
 
         if current_size > self.MAX_FILE_SIZE:
-            print("Reducing image dimensions to fit within size limit")
+            logger.debug("Reducing image dimensions to fit the upload size limit")
             reduction_factor = 0.9
             while current_size > self.MAX_FILE_SIZE and reduction_factor > 0.5:
                 new_dimensions = (
@@ -135,8 +138,6 @@ class ImageUploader:
 
         Args:
             image_path: Path to the image file
-            on_success: Signal. self.signals for success (takes image URL as parameter)
-            on_failure: Signal. self.signals for failure (takes error message as parameter)
             compress: Whether to compress the image before uploading only compresses to 512kb!
         """
 
@@ -153,7 +154,7 @@ class ImageUploader:
             response = requests.post(self.UPLOAD_URL, files=files)
 
             if response.status_code == 200:
-                print("Uploaded: " + str(response.text))
+                logger.info("Image upload completed")
                 self.signals.success_signal.emit(response.text)
             else:
                 error_msg = f"Server error: {response.status_code}, {response.text}"

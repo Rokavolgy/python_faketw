@@ -1,6 +1,8 @@
-from PySide6.QtCore import Qt, QEvent
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QEvent, QSize, QBuffer
+from PySide6.QtGui import QPixmap, QMovie
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QLabel
+
+from widgets.avif_widget import AvifWidget
 
 
 class ImagePreviewWindow(QDialog):
@@ -9,11 +11,17 @@ class ImagePreviewWindow(QDialog):
         self.setWindowTitle(user_name + "'s image")
         self.resize(800, 600)
         self.setWindowFlags(Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.image_url = image_url
         self.original_pixmap = None
+        self.animation_widget = None
+        self.movie = None
+        self.movie_buffer = None
         self.zoom_factor = 1.0  # Start zoomed out
         self.dragging = False
         self.last_mouse_position = None
+        self._cleaned_up = False
+        self._loader_task = None
 
         layout = QVBoxLayout(self)
         self.scroll_area = QScrollArea(self)
@@ -32,8 +40,19 @@ class ImagePreviewWindow(QDialog):
         self.scroll_area.viewport().installEventFilter(self)
         layout.addWidget(self.scroll_area)
 
+    def retain_loader_task(self, task):
+        self._loader_task = task
+
+    def release_loader_task(self):
+        self._loader_task = None
+
     def set_pixmap(self, pixmap: QPixmap):
+        if self._cleaned_up:
+            return
         if pixmap and not pixmap.isNull():
+            self._reset_animation()
+            if self.scroll_area.widget() is not self.image_label:
+                self._set_scroll_widget(self.image_label)
             # compute initial zoom to fit the viewport
             size = pixmap.size()
             vp = self.scroll_area.viewport().size()
@@ -44,6 +63,88 @@ class ImagePreviewWindow(QDialog):
                 self.zoom_factor = 1.0
             self.original_pixmap = pixmap
             self._apply_scaled_pixmap()
+
+    def set_animation_source(self, animation_source):
+        if self._cleaned_up or not isinstance(animation_source, tuple):
+            return
+
+        media_type, source = animation_source
+        self.original_pixmap = None
+        self.image_label.clear()
+        self._reset_animation()
+
+        if media_type == "gif_file":
+            self.movie = QMovie(source)
+        elif media_type == "gif_data" and isinstance(source, bytes):
+            self.movie_buffer = QBuffer()
+            self.movie_buffer.setData(source)
+            self.movie_buffer.open(QBuffer.ReadOnly)
+            self.movie = QMovie()
+            self.movie.setDevice(self.movie_buffer)
+        elif media_type == "avif_file":
+            self.animation_widget = AvifWidget(self)
+            self.animation_widget.setAlignment(Qt.AlignCenter)
+            self.animation_widget.setScaledSize(self._preview_size())
+            if self.animation_widget.setAvifFile(source):
+                self._set_scroll_widget(self.animation_widget)
+                self.animation_widget.startAnimation()
+            return
+        elif media_type == "avif_data" and isinstance(source, bytes):
+            self.animation_widget = AvifWidget(self)
+            self.animation_widget.setAlignment(Qt.AlignCenter)
+            self.animation_widget.setScaledSize(self._preview_size())
+            if self.animation_widget.setAvifData(source):
+                self._set_scroll_widget(self.animation_widget)
+                self.animation_widget.startAnimation()
+            return
+
+        if self.movie and self.movie.isValid():
+            self.movie.setScaledSize(self._preview_size())
+            self.movie.setCacheMode(QMovie.CacheNone)
+            self.image_label.setMovie(self.movie)
+            self._set_scroll_widget(self.image_label)
+            self.movie.start()
+
+    def _set_scroll_widget(self, widget):
+        current_widget = self.scroll_area.widget()
+        if current_widget is widget:
+            return
+        if current_widget:
+            detached_widget = self.scroll_area.takeWidget()
+            if detached_widget is self.image_label:
+                detached_widget.setParent(self)
+        self.scroll_area.setWidget(widget)
+
+    def _preview_size(self):
+        viewport_size = self.scroll_area.viewport().size()
+        width = max(1, viewport_size.width())
+        height = max(1, viewport_size.height())
+        return QSize(width, height)
+
+    def _reset_animation(self):
+        if self.animation_widget:
+            animation_widget = self.animation_widget
+            if self.scroll_area and self.scroll_area.widget() is animation_widget:
+                self.scroll_area.takeWidget()
+            animation_widget.dispose()
+            animation_widget.clear()
+            animation_widget.setParent(None)
+            animation_widget.deleteLater()
+            self.animation_widget = None
+        if self.movie:
+            movie = self.movie
+            if self.image_label:
+                try:
+                    self.image_label.setMovie(None)
+                except TypeError:
+                    self.image_label.clear()
+            movie.stop()
+            movie.deleteLater()
+            self.movie = None
+        if self.movie_buffer:
+            self.movie_buffer.close()
+            self.movie_buffer.deleteLater()
+            self.movie_buffer = None
 
     def _apply_scaled_pixmap(self):
         if self.original_pixmap and not self.original_pixmap.isNull():
@@ -75,6 +176,9 @@ class ImagePreviewWindow(QDialog):
         return False
 
     def wheelEvent(self, event):
+        if self.animation_widget or self.movie:
+            event.ignore()
+            return
         mouse_pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
         hbar = self.scroll_area.horizontalScrollBar()
         vbar = self.scroll_area.verticalScrollBar()
@@ -120,6 +224,9 @@ class ImagePreviewWindow(QDialog):
         self._update_zoom_and_scroll()
 
     def _update_zoom_and_scroll(self, mouse_pos=None, old_hval=None, old_vval=None, zoom_delta=None):
+        if not self.original_pixmap:
+            return
+
         vp = self.scroll_area.viewport()
         hbar = self.scroll_area.horizontalScrollBar()
         vbar = self.scroll_area.verticalScrollBar()
@@ -149,11 +256,29 @@ class ImagePreviewWindow(QDialog):
             vbar.setValue(int((old_vval + mouse_pos.y()) * new_img_height / old_img_height - mouse_pos.y()))
 
     def closeEvent(self, event):
+        self.cleanup()
         super().closeEvent(event)
-        # clean up references
-        self.image_label.setPixmap(QPixmap())
+
+    def cleanup(self):
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+
+        if self.scroll_area:
+            self.scroll_area.viewport().removeEventFilter(self)
+        self._reset_animation()
+        if self.image_label:
+            self.image_label.clear()
+            if self.scroll_area and self.scroll_area.widget() is self.image_label:
+                self.scroll_area.takeWidget()
+            self.image_label.setParent(None)
+            self.image_label.deleteLater()
+
+        self.image_label = None
+        self.scroll_area = None
         self.original_pixmap = None
+        self._loader_task = None
+        self.image_url = ""
         self.zoom_factor = 1.0
         self.dragging = False
         self.last_mouse_position = None
-        self.deleteLater()

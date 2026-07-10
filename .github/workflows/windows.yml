@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11'
           architecture: 'x64'
           cache: 'pip'
 
@@ -34,14 +34,14 @@ jobs:
         run: python -m unittest discover -s tests
 
   build:
-    runs-on: windows-2025
+    runs-on: windows-latest
     steps:
 
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11'
           architecture: 'x64'
           cache: 'pip'
       - run: pip install -r requirements.txt
@@ -49,7 +49,7 @@ jobs:
       - name: Qt GUI with PySide6
         uses: Nuitka/Nuitka-Action@main
         with:
-          nuitka-version: main
+          nuitka-version: develop
           script-name: main_window.py
           mode: standalone
           enable-plugins: pyside6
@@ -63,13 +63,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ github.event.inputs.environment }}
-          path: build/main_window.dist #ok
+          path: build/main_window.dist
           include-hidden-files: true
 
       - name: Upload Nuitka Cache
         uses: actions/upload-artifact@v4
         with:
           name: cache-${{ github.event.inputs.environment }}
-          path: build/main_window.build #ok
+          path: build/main_window.build
           include-hidden-files: true
 

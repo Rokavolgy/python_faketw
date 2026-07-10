@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from controller.firestore import login_user
+from controller.auth_controller import login_user
 
 
 class LoginWindow(QMainWindow):
@@ -129,6 +129,7 @@ class LoginWindow(QMainWindow):
             return
 
         try:
+
             success, user_data = login_user(username, password)
 
             if success:

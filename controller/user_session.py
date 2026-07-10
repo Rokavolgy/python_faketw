@@ -1,4 +1,8 @@
+import logging
+
 from modal.user import ProfileData
+
+logger = logging.getLogger(__name__)
 
 
 class UserSession:
@@ -73,7 +77,7 @@ class UserSession:
         if isinstance(data, dict):
 
             try:
-                print("Dictionary data:", data)
+                logger.debug("Dictionary profile data received")
             except Exception:
                 raise ValueError("i")
         elif isinstance(data, ProfileData):

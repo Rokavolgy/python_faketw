@@ -1,7 +1,8 @@
+import gc
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QThreadPool
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtGui import QFont, QPixmapCache
 from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
@@ -12,8 +13,10 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from controller.firestore import fetch_user_info, fetch_posts_and_user_info, FirestoreListener
+from controller.firebase_client import fetch_user_info
+from controller.firestore_listener import FirestoreListener, delete_post_2
 from controller.image_loader_task import ImageLoaderTask
+from controller.post_controller import fetch_posts_and_user_info
 from controller.profiler import track_execution_time
 from controller.user_session import UserSession
 from modal.constants import Constants
@@ -28,11 +31,14 @@ class ProfileView(QMainWindow):
         self.user_id = user_id
         self.profile_data = profile_data
         self.parent_window = parent_window
-        self.thread_pool = QThreadPool()
+        self.thread_pool = QThreadPool.globalInstance()
         self.profile_pic = None
         self.cover_image = None
         self.edit_window = None
         self.user_posts = []
+        self.posts_scroll = None
+        self.posts_layout = None
+        self._cleaned_up = False
 
         self.listener = FirestoreListener()
         self.listener.newPostsSignal.connect(self.on_post_notification)
@@ -207,26 +213,35 @@ class ProfileView(QMainWindow):
         self.init_ui()
 
     def create_posts_section(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
+        self.posts_scroll = QScrollArea()
+        self.posts_scroll.setWidgetResizable(True)
+        self.posts_scroll.verticalScrollBar().valueChanged.connect(
+            self.schedule_lazy_media_loads
+        )
 
         container = QWidget()
         self.posts_layout = QVBoxLayout(container)
 
-        self.user_posts = fetch_posts_and_user_info(self.user_id)
+        user_session = UserSession()
+        self.user_posts = fetch_posts_and_user_info(
+            self.user_id,
+            limit=40,
+            current_user_id=user_session.user_id,
+            user_likes=user_session.user_likes or [],
+        )
         for post in self.user_posts:
             post_widget = PostWidget(post, hide_buttons=True)
-            post_widget.deleteClicked.connect(self.listener.delete_post_2)
+            post_widget.deleteClicked.connect(delete_post_2)
             self.posts_layout.addWidget(post_widget)
 
         self.posts_layout.addStretch()
-        scroll.setWidget(container)
+        self.posts_scroll.setWidget(container)
+        self.schedule_lazy_media_loads()
 
-        return scroll
+        return self.posts_scroll
 
-    def on_post_notification(self, post_data):
+    def on_post_notification(self, post_data, _should_notify=False):
         if post_data.userId != self.user_id:
-            print('fail')
             return
 
         for i, post in enumerate(self.user_posts):
@@ -242,8 +257,9 @@ class ProfileView(QMainWindow):
 
         self.user_posts.insert(0, post_data)
         post_widget = PostWidget(post_data)
-        post_widget.deleteClicked.connect(self.listener.delete_post_2)
+        post_widget.deleteClicked.connect(delete_post_2)
         self.posts_layout.insertWidget(0, post_widget)
+        self.schedule_lazy_media_loads()
 
     def on_remove_from_store(self, post_id):
         for i, post in enumerate(self.user_posts):
@@ -254,19 +270,80 @@ class ProfileView(QMainWindow):
                     widget = self.posts_layout.itemAt(j).widget()
                     if isinstance(widget, PostWidget) and widget.post_data.id == post_id:
                         self.posts_layout.removeWidget(widget)
-                        widget.deleteLater()
+                        widget.cleanup_and_delete()
                         break
                 break
 
     def closeEvent(self, event):
-        if hasattr(self, 'listener'):
-            if hasattr(self.listener, '_post_watch') and self.listener._post_watch:
-                self.listener._post_watch.unsubscribe()
-            if hasattr(self.listener, '_likes_watch') and self.listener._likes_watch:
-                self.listener._likes_watch.unsubscribe()
+        self.cleanup()
         super().closeEvent(event)
 
+    def schedule_lazy_media_loads(self):
+        QTimer.singleShot(0, self.load_visible_media)
+
+    def load_visible_media(self):
+        if not self.posts_scroll or not self.posts_layout:
+            return
+
+        scrollbar = self.posts_scroll.verticalScrollBar()
+        viewport_top = scrollbar.value()
+        viewport_bottom = viewport_top + self.posts_scroll.viewport().height()
+        preload_margin = 700
+
+        for i in range(self.posts_layout.count()):
+            item = self.posts_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if not isinstance(widget, PostWidget):
+                continue
+
+            geometry = widget.geometry()
+            if (
+                    geometry.bottom() >= viewport_top - preload_margin
+                    and geometry.top() <= viewport_bottom + preload_margin
+            ):
+                widget.start_media_load()
+
+    def cleanup(self):
+        if self._cleaned_up:
+            return
+
+        self._cleaned_up = True
+        if hasattr(self, 'listener'):
+            self.listener.stop_listening()
+            try:
+                self.listener.newPostsSignal.disconnect(self.on_post_notification)
+                self.listener.removeFromStoreSignal.disconnect(self.on_remove_from_store)
+            except Exception:
+                pass
+
+        if self.posts_layout:
+            for i in reversed(range(self.posts_layout.count())):
+                widget = self.posts_layout.itemAt(i).widget()
+                if isinstance(widget, PostWidget):
+                    widget.cleanup_and_delete()
+
+        if self.cover_image:
+            self.cover_image.clear()
+        if self.profile_pic:
+            self.profile_pic.clear()
+
+        central_widget = self.takeCentralWidget()
+        if central_widget:
+            central_widget.setParent(None)
+            central_widget.deleteLater()
+
+        self.user_posts = []
+        self.cover_image = None
+        self.profile_pic = None
+        self.posts_scroll = None
+        self.posts_layout = None
+        QPixmapCache.clear()
+        QTimer.singleShot(0, gc.collect)
+
     def update_image(self, label, pixmap, height=400, width=300, aspect_ratio=True):
+        if self._cleaned_up or label is None or pixmap is None:
+            return
+
         if aspect_ratio:
             actual_width = label.width()
             scaled_pixmap = pixmap.scaled(
@@ -278,20 +355,14 @@ class ProfileView(QMainWindow):
             )
 
         label.setPixmap(scaled_pixmap)
-        print("ok")
 
     def go_back(self):
         if self.parent_window and hasattr(self.parent_window, "stacked_widget"):
+            self.cleanup()
             self.parent_window.stacked_widget.setCurrentIndex(0)
             self.parent_window.stacked_widget.removeWidget(self)
-            self.listener.newPostsSignal.disconnect(self.on_post_notification)
-            self.listener.removeFromStoreSignal.disconnect(self.on_remove_from_store)
-            for i in reversed(range(self.posts_layout.count())):
-                widget = self.posts_layout.itemAt(i).widget()
-                if widget is not None and isinstance(widget, PostWidget):
-                    widget.cleanup_and_delete()
-                    self.posts_layout.removeWidget(widget)
-            self.user_posts = []
+            self.setParent(None)
+            self.deleteLater()
 
         else:
 

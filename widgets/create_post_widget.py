@@ -1,7 +1,8 @@
+import logging
 import uuid
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QIcon, QFont
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -12,11 +13,11 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
-from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
-from controller.image_uploader import ImageUploader
 from controller.user_session import UserSession
 from modal.post import PostData
+
+logger = logging.getLogger(__name__)
 
 
 def generate_random_uuid():
@@ -33,7 +34,7 @@ class CreatePostWidget(QWidget):
         self.user_id = user_id
         self.user_name = user_name
         self.selected_image_path = None
-        self.image_uploader = ImageUploader()
+        self.image_uploader = None
         self.init_ui()
 
     def init_ui(self):
@@ -41,9 +42,9 @@ class CreatePostWidget(QWidget):
         self.setLayout(layout)
 
         # header
-        header_label = QLabel("Create New Post")
-        header_label.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
-        layout.addWidget(header_label)
+        # header_label = QLabel("Create New Post")
+        # header_label.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
+        # layout.addWidget(header_label)
 
         self.content_editor = QTextEdit()
         self.content_editor.setPlaceholderText("What's on your mind?")
@@ -134,10 +135,15 @@ class CreatePostWidget(QWidget):
         def on_upload_failure(error_msg):
             self.post_btn.setEnabled(True)
             self.post_btn.setText("Post")
-            print("Hiba történt az upload során:", error_msg)
+            logger.error("Image upload failed: %s", error_msg)
             QMessageBox.critical(
                 self, "Upload Failed", f"Failed to upload image: {error_msg}"
             )
+
+        if self.image_uploader is None:
+            from controller.image_uploader import ImageUploader
+
+            self.image_uploader = ImageUploader()
 
         self.image_uploader.signals.success_signal.connect(on_upload_success)
         self.image_uploader.signals.failure_signal.connect(on_upload_failure)
@@ -146,9 +152,10 @@ class CreatePostWidget(QWidget):
         )
 
     def create_post(self, content, image_url=None):
-        from controller.firestore import (
+        from controller.post_controller import (
             create_new_post,
         )
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
         try:
             user = UserSession()

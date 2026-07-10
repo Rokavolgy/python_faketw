@@ -1,9 +1,13 @@
+import logging
 import os
-from io import BytesIO
 
 import requests
 from PySide6.QtCore import QRunnable, Slot, Signal, QObject
 from PySide6.QtGui import QPixmap
+
+from controller.media_store import MediaStore
+
+logger = logging.getLogger(__name__)
 
 
 def is_gif(file_path):
@@ -16,126 +20,133 @@ def is_gif(file_path):
             header = file.read(6)
             return header in [b"GIF87a", b"GIF89a"]
     except Exception as e:
-        print(f"Error reading file: {e}")
+        logger.debug("Could not inspect GIF file %s", file_path, exc_info=True)
         return False
 
 
 def is_avif(file_path):
     try:
+        if file_path.lower().endswith(".avif"):
+            return True
+
         with open(file_path, "rb") as file:
-            # Check ftyp section
-            file.seek(8)
-            ftyp = file.read(4).decode("ascii", errors="ignore")
-            if ftyp not in ["avis", "avif"]:
-                return False  # Not an AVIF file
+            # Read first 32 bytes to check file signature
+            header = file.read(32)
 
-            # Search for stsz section
-            file.seek(0)
-            data = file.read()
-            stsz_index = data.find(b"stsz")
-            if stsz_index == -1:
-                return False  # No stsz section found
+            # AVIF files are based on ISOBMFF format
+            # Check for 'ftyp' box and AVIF brand
+            if len(header) >= 12:
+                # Skip the first 4 bytes (box size), check for 'ftyp'
+                if header[4:8] == b'ftyp':
+                    # Check for AVIF brand identifiers
+                    brand_area = header[8:20]
+                    return b'avif' in brand_area or b'avis' in brand_area
 
-            num_frames = int.from_bytes(data[stsz_index + 12:stsz_index + 16], "big")
-            return num_frames > 1  # True if more than 1 frame
+        return False
     except Exception as e:
-        print(f"Error reading file: {e}")
+        logger.debug("Could not inspect AVIF file %s", file_path, exc_info=True)
         return False
 
 
 class ImageLoaderSignals(QObject):
     loaded_gif_signal = Signal(tuple)
+    loaded_avif_signal = Signal(tuple)  # New signal for AVIF data
+
 
 class ImageLoaderTask(QRunnable):
     """
     A QRunnable task to load an image from a URL and cache it.
     allow_gif: If True, allows GIFs to be loaded and cached as QMovie.
-    If False, GIFs will be treated as regular images and loaded as QPixmap.
+    allow_avif: If True, allows AVIF files to be loaded and handled properly.
+    If False, GIFs/AVIF will be treated as regular images and loaded as QPixmap.
     """
 
-    def __init__(self, image_url, callback, allow_gif=False, save_folder="cache", allow_cache_file=True):
+    def __init__(self, image_url, callback, allow_gif=False, allow_avif=True, save_folder="cache",
+                 allow_cache_file=True):
         super().__init__()
         self.image_url = image_url
         self.callback = callback
         self.save_folder = save_folder
         self.allow_cache_file = allow_cache_file
         self.allow_gif = allow_gif
+        self.allow_avif = allow_avif
         self.signals = ImageLoaderSignals()
         self.loaded_gif_signal = self.signals.loaded_gif_signal
+        self.loaded_avif_signal = self.signals.loaded_avif_signal
 
     @Slot()
     def run(self):
+        cache_key = (
+            f"{self.image_url}|gif={int(self.allow_gif)}|avif={int(self.allow_avif)}"
+        )
+        state, payload, event = MediaStore.acquire_media_load(cache_key)
+        if state == "cached":
+            self._dispatch(payload)
+            return
+        if state == "wait":
+            payload = MediaStore.wait_for_media(cache_key, event)
+            self._dispatch(payload)
+            return
+
         try:
-            file_name = os.path.join(self.save_folder, os.path.basename(self.image_url))
-            if self.allow_cache_file:
-                if os.path.exists(file_name):
-                    gif_bool = is_gif(file_name)
-                    avif_bool = is_avif(file_name)
-                    if gif_bool and self.allow_gif:
-                        with open(file_name, "rb") as file:
-                            gif_data = file.read()
-                        self.loaded_gif_signal.emit(("gif_data", gif_data))
-                        return
-                    elif avif_bool and self.allow_gif:
-                        self.handle_animated_avif(file_name)
-                        return
-                    else:
-                        pixmap = QPixmap()
-                        if pixmap.load(file_name):
-                            self.callback(pixmap)
-                            return
+            payload = self._load_payload()
+            if payload is None:
+                MediaStore.fail_media_load(cache_key)
+                self.callback(None)
+                return
+            MediaStore.finish_media_load(cache_key, payload)
+            self._dispatch(payload)
+        except Exception as e:
+            MediaStore.fail_media_load(cache_key)
+            logger.exception("Error loading image %s", self.image_url)
+            self.callback(None)
 
-            # if self.image_url in ImageLoaderTask.cache:
-            #    self.callback(ImageLoaderTask.cache[self.image_url])
-            #    return
-
-            if self.save_folder:
-                os.makedirs(self.save_folder, exist_ok=True)
-
-            response = requests.get(self.image_url)
-            response.raise_for_status()
-            image_data = BytesIO(response.content)
-
-            with open(file_name, "wb") as file:
-                file.write(response.content)
-
+    def _load_payload(self):
+        file_name = os.path.join(self.save_folder, os.path.basename(self.image_url))
+        if self.allow_cache_file and os.path.exists(file_name):
             gif_bool = is_gif(file_name)
             avif_bool = is_avif(file_name)
+
             if gif_bool and self.allow_gif:
-                self.callback(("gif_data", response.content))
-            elif avif_bool and self.allow_gif:
-                self.handle_animated_avif(file_name)
+                return "gif_file", file_name
+            if avif_bool and self.allow_avif:
+                # Route all AVIF files through the custom decoder. Qt builds
+                # do not consistently include an AVIF QPixmap plugin.
+                return "avif_file", file_name
+
+            pixmap = QPixmap()
+            if pixmap.load(file_name):
+                return pixmap
+
+        if self.save_folder:
+            os.makedirs(self.save_folder, exist_ok=True)
+
+        response = requests.get(self.image_url, timeout=(5, 20))
+        response.raise_for_status()
+
+        with open(file_name, "wb") as file:
+            file.write(response.content)
+
+        gif_bool = is_gif(file_name)
+        avif_bool = is_avif(file_name)
+
+        if gif_bool and self.allow_gif:
+            return "gif_file", file_name
+        if avif_bool and self.allow_avif:
+            return "avif_file", file_name
+
+        pixmap = QPixmap()
+        if pixmap.loadFromData(response.content):
+            return pixmap
+        return None
+
+    def _dispatch(self, payload):
+        if isinstance(payload, tuple):
+            media_type = payload[0]
+            if media_type.startswith("gif_"):
+                self.loaded_gif_signal.emit(payload)
                 return
-            else:
-                pixmap = QPixmap()
-                if pixmap.loadFromData(bytes(image_data.getbuffer())):
-                    self.callback(pixmap)
-        except Exception as e:
-            print(f"Error loading image: {e}")
-            self.callback(None)
-        finally:
-            self.loaded_gif_signal.disconnect()
-
-    def handle_animated_avif(self, file_name):
-        from PIL import Image
-        image = Image.open(file_name)
-
-        if image.mode != "RGBA":
-            frames = [image.seek(i) or image.convert("RGBA") for i in range(image.n_frames)]
-        else:
-            frames = [image.seek(i) or image.copy() for i in range(image.n_frames)]
-
-        with BytesIO() as gif_buffer:
-            frames[0].save(
-                gif_buffer,
-                format="WEBP",
-                save_all=True,
-                append_images=frames[1:],
-                method=0,
-                duration=max(10, image.info.get('duration', 100) - 5),
-                loop=0
-            )
-            gif_data = gif_buffer.getvalue()
-
-        self.loaded_gif_signal.emit(("gif_data", gif_data))
-        return
+            if media_type.startswith("avif_"):
+                self.loaded_avif_signal.emit(payload)
+                return
+        self.callback(payload)

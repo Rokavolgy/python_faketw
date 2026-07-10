@@ -34,13 +34,11 @@ class PostButton(QPushButton):
         self.animation.setEasingCurve(QEasingCurve.OutBounce)
 
     def mousePressEvent(self, event):
-        # Start animation from current size to larger size and back
         self.animation.setStartValue(QSize(20, 20))
         self.animation.setEndValue(QSize(26, 26))
         self.animation.start()
 
-        # Schedule another animation to restore size
-        QTimer.singleShot(150, self.animate_back)
+        QTimer.singleShot(100, self.animate_back)
 
         super().mousePressEvent(event)
 
