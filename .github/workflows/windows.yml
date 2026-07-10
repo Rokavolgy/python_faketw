@@ -48,6 +48,9 @@ jobs:
 
       - name: Qt GUI with PySide6
         uses: Nuitka/Nuitka-Action@main
+        env:
+          CCFLAGS: " /Ox /GL /Gw" 
+          LDFLAGS: " /LTCG /OPT:REF /OPT:ICF "
         with:
           nuitka-version: develop
           script-name: main_window.py
@@ -55,6 +58,7 @@ jobs:
           enable-plugins: pyside6
           output-file: Fwitter
           output-dir: 'build'
+          lto: yes
           msvc: latest
           windows-console-mode: disable
           include-data-dir: res=res
