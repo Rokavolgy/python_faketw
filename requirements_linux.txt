@@ -1,4 +1,4 @@
-Pillow~=11.3.0
+Pillow~=12.3.0
 protobuf~=5.29.4
 Requests==2.33.0
 google-cloud-firestore~=2.21.0
