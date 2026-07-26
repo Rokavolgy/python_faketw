@@ -1,10 +1,12 @@
 import logging
 import sys
 
+from PySide6.QtCore import Slot
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
 from controller.logging_config import configure_logging
+from modal.user import ProfileData
 
 logger = logging.getLogger(__name__)
 configure_logging()
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
             logger.warning("Could not load the application font")
         self.show_login_window()
 
+    @Slot()
     def show_login_window(self):
         if hasattr(self, 'signup_window'):
             self.signup_window.close()
@@ -40,6 +43,7 @@ class MainWindow(QMainWindow):
         self.login_window.signupRequested.connect(self.show_signup_window)
         self.login_window.show()
 
+    @Slot()
     def show_signup_window(self):
 
         if hasattr(self, 'login_window'):
@@ -52,10 +56,12 @@ class MainWindow(QMainWindow):
         self.signup_window.loginRequested.connect(self.show_login_window)
         self.signup_window.show()
 
+    @Slot(ProfileData)
     def on_registration_completed(self, profile_data):
         self.init_views()
         self.show()
 
+    @Slot()
     def on_login_successful(self):
 
         self.init_views()
@@ -71,6 +77,7 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget.setCurrentIndex(0)
 
+    @Slot(str)
     def show_profile_view(self, userId):
         from views.profile_view import ProfileView
 
@@ -79,6 +86,7 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(profile_view)
         self.stacked_widget.setCurrentIndex(self.stacked_widget.count() - 1)
 
+    @Slot(str)
     def show_comment_view(self, post_id):
         from views.comment_view import CommentView
 

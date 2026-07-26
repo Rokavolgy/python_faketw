@@ -6,7 +6,7 @@ from datetime import datetime
 
 import requests
 from PIL import Image
-from PySide6.QtCore import Signal, QObject
+from PySide6.QtCore import Signal, Slot, QObject
 
 from controller.profiler import track_execution_time
 from modal.constants import Constants
@@ -15,11 +15,23 @@ logger = logging.getLogger(__name__)
 
 
 class ImageUploaderSignals(QObject):
+    _success_ready = Signal(str)
+    _failure_ready = Signal(str)
     success_signal = Signal(str)
     failure_signal = Signal(str)
 
     def __init__(self):
         super().__init__()
+        self._success_ready.connect(self._deliver_success)
+        self._failure_ready.connect(self._deliver_failure)
+
+    @Slot(str)
+    def _deliver_success(self, message):
+        self.success_signal.emit(message)
+
+    @Slot(str)
+    def _deliver_failure(self, message):
+        self.failure_signal.emit(message)
 
 
 class ImageUploader:
@@ -82,7 +94,7 @@ class ImageUploader:
             else:
                 if buffer.getbuffer().nbytes > self.MAX_FILE_SIZE:
                     logger.warning("AVIF converted from GIF is still too large")
-                    self.signals.failure_signal.emit("AVIF is too large after compression")
+                    self.signals._failure_ready.emit("AVIF is too large after compression")
                     raise RuntimeError("AVIF is too large after compression")
                 return buffer
 
@@ -155,10 +167,10 @@ class ImageUploader:
 
             if response.status_code == 200:
                 logger.info("Image upload completed")
-                self.signals.success_signal.emit(response.text)
+                self.signals._success_ready.emit(response.text)
             else:
                 error_msg = f"Server error: {response.status_code}, {response.text}"
-                self.signals.failure_signal.emit(error_msg)
+                self.signals._failure_ready.emit(error_msg)
 
         thread = threading.Thread(target=upload_task)
         thread.daemon = True

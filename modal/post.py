@@ -5,7 +5,7 @@ from typing import List, Optional
 from modal.user import ProfileData
 
 
-@dataclass
+@dataclass(slots=True)
 class PostData:
     content: str
     commentsCount: int

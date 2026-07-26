@@ -1,7 +1,7 @@
 import gc
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtCore import Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QFont, QPixmapCache
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -20,6 +20,7 @@ from controller.post_controller import fetch_posts_and_user_info
 from controller.profiler import track_execution_time
 from controller.user_session import UserSession
 from modal.constants import Constants
+from modal.post import PostData
 from modal.user import ProfileData
 from views.profile_edit_window import ProfileEditWindow
 from widgets.post_widget import PostWidget
@@ -199,10 +200,12 @@ class ProfileView(QMainWindow):
 
         return header_widget
 
+    @Slot()
     def open_profile_edit(self):
         self.edit_window = ProfileEditWindow(self.profile_data)
         self.edit_window.profileUpdated.connect(self.on_profile_updated)
 
+    @Slot(ProfileData)
     def on_profile_updated(self, updated_profile):
         self.profile_data = updated_profile
 
@@ -240,6 +243,7 @@ class ProfileView(QMainWindow):
 
         return self.posts_scroll
 
+    @Slot(PostData, bool)
     def on_post_notification(self, post_data, _should_notify=False):
         if post_data.userId != self.user_id:
             return
@@ -261,6 +265,7 @@ class ProfileView(QMainWindow):
         self.posts_layout.insertWidget(0, post_widget)
         self.schedule_lazy_media_loads()
 
+    @Slot(str)
     def on_remove_from_store(self, post_id):
         for i, post in enumerate(self.user_posts):
             if post.id == post_id:
@@ -278,9 +283,11 @@ class ProfileView(QMainWindow):
         self.cleanup()
         super().closeEvent(event)
 
+    @Slot()
     def schedule_lazy_media_loads(self):
         QTimer.singleShot(0, self.load_visible_media)
 
+    @Slot()
     def load_visible_media(self):
         if not self.posts_scroll or not self.posts_layout:
             return
@@ -356,6 +363,7 @@ class ProfileView(QMainWindow):
 
         label.setPixmap(scaled_pixmap)
 
+    @Slot()
     def go_back(self):
         if self.parent_window and hasattr(self.parent_window, "stacked_widget"):
             self.cleanup()

@@ -49,8 +49,47 @@ def is_avif(file_path):
 
 
 class ImageLoaderSignals(QObject):
+    _pending_deliveries = set()
+
+    _result_ready = Signal(object)
+    _gif_ready = Signal(tuple)
+    _avif_ready = Signal(tuple)
     loaded_gif_signal = Signal(tuple)
     loaded_avif_signal = Signal(tuple)  # New signal for AVIF data
+
+    def __init__(self, callback):
+        super().__init__()
+        self._callback = callback
+        self._pending_deliveries.add(self)
+        self._result_ready.connect(self._deliver_result)
+        self._gif_ready.connect(self._deliver_gif)
+        self._avif_ready.connect(self._deliver_avif)
+
+    def _release(self):
+        self._callback = None
+        self._pending_deliveries.discard(self)
+
+    @Slot(object)
+    def _deliver_result(self, payload):
+        try:
+            if self._callback:
+                self._callback(payload)
+        finally:
+            self._release()
+
+    @Slot(tuple)
+    def _deliver_gif(self, payload):
+        try:
+            self.loaded_gif_signal.emit(payload)
+        finally:
+            self._release()
+
+    @Slot(tuple)
+    def _deliver_avif(self, payload):
+        try:
+            self.loaded_avif_signal.emit(payload)
+        finally:
+            self._release()
 
 
 class ImageLoaderTask(QRunnable):
@@ -65,12 +104,11 @@ class ImageLoaderTask(QRunnable):
                  allow_cache_file=True):
         super().__init__()
         self.image_url = image_url
-        self.callback = callback
         self.save_folder = save_folder
         self.allow_cache_file = allow_cache_file
         self.allow_gif = allow_gif
         self.allow_avif = allow_avif
-        self.signals = ImageLoaderSignals()
+        self.signals = ImageLoaderSignals(callback)
         self.loaded_gif_signal = self.signals.loaded_gif_signal
         self.loaded_avif_signal = self.signals.loaded_avif_signal
 
@@ -92,14 +130,14 @@ class ImageLoaderTask(QRunnable):
             payload = self._load_payload()
             if payload is None:
                 MediaStore.fail_media_load(cache_key)
-                self.callback(None)
+                self.signals._result_ready.emit(None)
                 return
             MediaStore.finish_media_load(cache_key, payload)
             self._dispatch(payload)
         except Exception as e:
             MediaStore.fail_media_load(cache_key)
             logger.exception("Error loading image %s", self.image_url)
-            self.callback(None)
+            self.signals._result_ready.emit(None)
 
     def _load_payload(self):
         file_name = os.path.join(self.save_folder, os.path.basename(self.image_url))
@@ -144,9 +182,9 @@ class ImageLoaderTask(QRunnable):
         if isinstance(payload, tuple):
             media_type = payload[0]
             if media_type.startswith("gif_"):
-                self.loaded_gif_signal.emit(payload)
+                self.signals._gif_ready.emit(payload)
                 return
             if media_type.startswith("avif_"):
-                self.loaded_avif_signal.emit(payload)
+                self.signals._avif_ready.emit(payload)
                 return
-        self.callback(payload)
+        self.signals._result_ready.emit(payload)

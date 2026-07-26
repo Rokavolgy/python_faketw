@@ -2,7 +2,7 @@ import logging
 import platform
 from datetime import datetime
 
-from PySide6.QtCore import Signal, QThreadPool, Qt, QTimer
+from PySide6.QtCore import Signal, Slot, QThreadPool, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QScrollArea, QSizePolicy, QLabel
 
 from controller.firestore_listener import FirestoreListener, delete_post_2
@@ -58,7 +58,6 @@ class PostsWindow(QMainWindow):
         self.thread_pool = QThreadPool.globalInstance()
         self.listener = FirestoreListener(post_limit=40)
         self.listener.newPostsSignal.connect(self.on_post_notification)
-        self.listener.likeUpdatedSignal.connect(self.on_post_like)
         self.listener.removeFromStoreSignal.connect(self.on_remove_from_store)
         self.listener.initialPostsLoadedSignal.connect(self.on_initial_fetch_complete)
         self.init_ui()
@@ -184,20 +183,24 @@ class PostsWindow(QMainWindow):
                 return widget
         return None
 
+    @Slot(str)
     def switch_to_profile_mode(self, userId):
         logger.debug("Opening profile view for %s", userId)
         self.profileSwitchRequested.emit(userId)
 
+    @Slot(str)
     def switch_to_comment_mode(self, postId):
         logger.debug("Opening comment view for post %s", postId)
         self.commentSwitchRequested.emit(postId)
 
+    @Slot(PostData)
     def on_post_created(self, new_post: PostData):
         if self.find_post_widget(new_post.id):
             return
         self.insert_post_widget_sorted(new_post)
         self.insert_post_data_sorted(new_post)
 
+    @Slot(PostData, bool)
     def on_post_notification(self, post_data: PostData, should_notify=False):
         # search
         post_data.likedByCurrentUser = UserSession().check_if_user_liked(post_data.id)
@@ -236,10 +239,7 @@ class PostsWindow(QMainWindow):
             self.add_post_widget(post_data)
         self.schedule_lazy_media_loads()
 
-    def on_post_like(self):
-        # updates elsewhere
-        pass
-
+    @Slot(str)
     def on_remove_from_store(self, post_id):
         post_widget = self.find_post_widget(post_id)
         if post_widget:
@@ -251,6 +251,7 @@ class PostsWindow(QMainWindow):
             post for post in self.posts_data if post.id != post_id
         ]
 
+    @Slot()
     def on_initial_fetch_complete(self):
         self.initial_fetch_done = True
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -258,9 +259,11 @@ class PostsWindow(QMainWindow):
         self.loading_label.deleteLater()
         self.schedule_lazy_media_loads()
 
+    @Slot()
     def schedule_lazy_media_loads(self):
         QTimer.singleShot(0, self.load_visible_media)
 
+    @Slot()
     def load_visible_media(self):
         if not self.scroll or not self.posts_layout:
             return

@@ -7,7 +7,7 @@ from io import BytesIO
 from typing import List, Optional, Tuple
 
 from PIL import Image
-from PySide6.QtCore import QTimer, Signal, QSize, Qt
+from PySide6.QtCore import QTimer, Signal, QSize, Slot, Qt
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QLabel
 
@@ -18,7 +18,7 @@ MAX_DECODED_AVIF_BYTES = 48 * 1024 * 1024
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AvifFrameSet:
     frames: Tuple[QPixmap, ...]
     durations: Tuple[int, ...]
@@ -381,6 +381,7 @@ class AvifWidget(QLabel):
         if self.avif_movie:
             self.avif_movie.setScaledSize(size)
 
+    @Slot()
     def _update_display(self):
         """Update the displayed frame"""
         if not self.avif_movie:

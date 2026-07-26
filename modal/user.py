@@ -7,7 +7,7 @@ STORAGE_URL = (
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class ProfileData:
     id: str
     bio: str
