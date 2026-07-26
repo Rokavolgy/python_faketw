@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal, Slot
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea,
@@ -10,6 +10,7 @@ from controller.firestore_listener import FirestoreListener
 from controller.image_loader_task import ImageLoaderTask
 from controller.post_controller import fetch_post_by_id
 from controller.user_session import UserSession
+from modal.comment import CommentData
 from modal.constants import Constants
 from widgets.post_widget import PostWidget
 
@@ -259,6 +260,7 @@ class CommentView(QMainWindow):
 
         return input_widget
 
+    @Slot()
     def post_comment(self):
         comment_text = self.comment_edit.toPlainText().strip()
         if not comment_text:
@@ -294,6 +296,7 @@ class CommentView(QMainWindow):
             self.post_button.setEnabled(True)
             self.post_button.setText("Post Comment")
 
+    @Slot(CommentData)
     def on_comment_added(self, comment_data):
         if comment_data.postId != self.post_id:
             return
@@ -320,6 +323,7 @@ class CommentView(QMainWindow):
 
         self.update_comments_label()
 
+    @Slot(str)
     def on_comment_removed(self, comment_id):
         old_count = len(self.comments)
         self.comments = [
@@ -337,6 +341,7 @@ class CommentView(QMainWindow):
         comment_widget.removeRequested.connect(self.remove_comment)
         return comment_widget
 
+    @Slot(str)
     def remove_comment(self, comment_id):
         user_session = UserSession()
         if (
@@ -361,6 +366,7 @@ class CommentView(QMainWindow):
         task.signals.finished.connect(self.on_comment_delete_finished)
         self.thread_pool.start(task)
 
+    @Slot(str, bool)
     def on_comment_delete_finished(self, comment_id, success):
         self.pending_comment_deletions.discard(comment_id)
         if success:
@@ -404,6 +410,7 @@ class CommentView(QMainWindow):
         if self.comments_label:
             self.comments_label.setText(f"Comments ({len(self.comments)})")
 
+    @Slot()
     def go_back(self):
         if self.parent_window and hasattr(self.parent_window, "stacked_widget"):
             self.parent_window.stacked_widget.setCurrentIndex(0)

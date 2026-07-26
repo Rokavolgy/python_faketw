@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal, QThreadPool
+from PySide6.QtCore import Qt, Signal, Slot, QThreadPool
 from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -188,14 +188,17 @@ class ProfileEditWindow(QMainWindow):
 
         self.setCentralWidget(main_widget)
 
+    @Slot(object)
     def update_profile_image(self, pixmap):
         """Update profile image in the UI"""
         self.profile_pic_label.setPixmap(pixmap)
 
+    @Slot(object)
     def update_cover_image(self, pixmap):
         """Update profile image in the UI"""
         self.cover_pic_label.setPixmap(pixmap)
 
+    @Slot()
     def select_profile_picture(self):
         """Open file dialog to select a new profile picture"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -207,6 +210,7 @@ class ProfileEditWindow(QMainWindow):
             pixmap = QPixmap(file_path)
             self.update_profile_image(pixmap)
 
+    @Slot()
     def select_cover_picture(self):
         """Open file dialog to select a new cover picture"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -252,6 +256,7 @@ class ProfileEditWindow(QMainWindow):
             return False
         return True
 
+    @Slot()
     def save_profile(self):
         """Save profile changes to backend"""
         # Validate input

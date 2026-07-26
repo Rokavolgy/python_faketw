@@ -1,6 +1,6 @@
 import logging
-from datetime import datetime
 import weakref
+from datetime import datetime
 
 from PySide6 import QtCore
 from PySide6.QtCore import Signal, Qt, QThreadPool, QThread, QBuffer, QRunnable, Slot, QObject
@@ -20,9 +20,9 @@ from controller.user_session import UserSession
 from modal.constants import Constants
 from modal.post import PostData
 from views.image_preview_window import ImagePreviewWindow
+from widgets.avif_widget import AvifWidget
 from widgets.clickable_labels import ClickableLabel, ClickableImageLabel
 from widgets.like_comment_button import PostButton
-from widgets.avif_widget import AvifWidget
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,8 @@ class PostWidget(QWidget):
         self._media_image_url = None
         self._media_load_started = False
         self._like_update_pending = False
+        self._like_task = None
+        self._like_rollback = None
         self.init_ui()
         if not self.lazy_media:
             self.start_media_load()
@@ -297,9 +299,7 @@ class PostWidget(QWidget):
             IconCache.get_icon(heart_filled_icon),
             f" {self.post_data.likesCount}" if self.post_data.likesCount else " Like",
         )
-        self.like_button.clicked.connect(
-            lambda: self.on_like_clicked(self.post_data.id)
-        )
+        self.like_button.clicked.connect(self.on_like_clicked)
         self.like_button.setFixedHeight(50)
 
         self.comment_button = PostButton(
@@ -310,15 +310,11 @@ class PostWidget(QWidget):
                 else " Comment"
             ),
         )
-        self.comment_button.clicked.connect(
-            lambda: self.on_comment_clicked(self.post_data.id)
-        )
+        self.comment_button.clicked.connect(self.on_comment_clicked)
         self.comment_button.setFixedHeight(50)
 
         self.delete_button = PostButton(IconCache.get_icon("res/icons/delete.png"), "Delete")
-        self.delete_button.clicked.connect(
-            lambda: self.on_delete_clicked(self.post_data.id)
-        )
+        self.delete_button.clicked.connect(self.on_delete_clicked)
         self.delete_button.setFixedHeight(50)
 
         if not self.hide_buttons:
@@ -337,6 +333,7 @@ class PostWidget(QWidget):
 
         self.post_data_old = self.post_data
 
+    @Slot(str, str)
     def on_image_clicked(self, image_url: str, username: str):
         if not hasattr(self, "_image_previews"):
             self._image_previews = []  # keep references
@@ -415,13 +412,16 @@ class PostWidget(QWidget):
         task.loaded_avif_signal.connect(one_time_avif_update)
         self.thread_pool.start(task)
 
+    @Slot(str)
     def on_profile_clicked(self, userId):
         self.profileClicked.emit(userId)
 
-    def on_like_clicked(self, post_id):
+    @Slot()
+    def on_like_clicked(self):
         if self._like_update_pending:
             return
 
+        post_id = self.post_data.id
         user_session = UserSession()
         if not user_session.is_authenticated:
             logger.warning("Unauthenticated like click ignored")
@@ -443,28 +443,42 @@ class PostWidget(QWidget):
         else:
             user_session.remove_user_like(post_id)
 
-        task = LikeToggleTask(post_id, user_session.user_id)
+        self._like_task = LikeToggleTask(post_id, user_session.user_id)
+        self._like_rollback = (previous_liked, previous_count, post_id)
+        self._like_task.signals.finished.connect(self._on_toggle_finished)
+        self.thread_pool.start(self._like_task)
 
-        def on_toggle_finished(success):
-            self._like_update_pending = False
-            self.like_button.setEnabled(True)
-            if not success:
-                self.apply_like_state(previous_liked, previous_count)
-                if previous_liked:
-                    user_session.add_user_like(post_id)
-                else:
-                    user_session.remove_user_like(post_id)
-            task.signals.finished.disconnect(on_toggle_finished)
+    @Slot(bool)
+    def _on_toggle_finished(self, success):
+        task = self._like_task
+        rollback = self._like_rollback
+        self._like_task = None
+        self._like_rollback = None
+        self._like_update_pending = False
+        self.like_button.setEnabled(True)
 
-        task.signals.finished.connect(on_toggle_finished)
-        self.thread_pool.start(task)
+        if not success and rollback:
+            previous_liked, previous_count, post_id = rollback
+            self.apply_like_state(previous_liked, previous_count)
+            user_session = UserSession()
+            if previous_liked:
+                user_session.add_user_like(post_id)
+            else:
+                user_session.remove_user_like(post_id)
 
-    def on_comment_clicked(self, post_id):
+        if task:
+            try:
+                task.signals.finished.disconnect(self._on_toggle_finished)
+            except (RuntimeError, TypeError):
+                pass
 
-        self.commentClicked.emit(post_id)
+    @Slot()
+    def on_comment_clicked(self):
+        self.commentClicked.emit(self.post_data.id)
 
-    def on_delete_clicked(self, post_id):
-        self.deleteClicked.emit(post_id)
+    @Slot()
+    def on_delete_clicked(self):
+        self.deleteClicked.emit(self.post_data.id)
 
     def refresh_ui(self):
         logger.debug("Refreshing post UI for %s", self.post_data.id)

@@ -1,6 +1,6 @@
 import sys
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -116,6 +116,7 @@ class LoginWindow(QMainWindow):
     def open_signup_window(self, event):
         self.signupRequested.emit()
 
+    @Slot()
     def authenticate_user(self):
         """Authenticate the user with the provided credentials"""
         username = self.username_edit.text().strip()

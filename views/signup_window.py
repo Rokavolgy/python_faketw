@@ -1,6 +1,6 @@
 import sys
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -41,9 +41,6 @@ class SignupWindow(QMainWindow):
             logo_label.setPixmap(
                 logo_pixmap.scaledToWidth(150, Qt.SmoothTransformation)
             )
-        else:
-            logo_label.setText("Social Media App")
-            logo_label.setFont(QFont("Wix Madefor Text", 24, QFont.Bold))
         logo_label.setAlignment(Qt.AlignCenter)
         logo_layout.addWidget(logo_label)
         main_layout.addLayout(logo_layout)
@@ -133,6 +130,7 @@ class SignupWindow(QMainWindow):
 
         self.profile_edit_window = None
 
+    @Slot()
     def register_user(self):
         """Register a new user with the provided information"""
         email = self.email_edit.text().strip()
@@ -191,6 +189,7 @@ class SignupWindow(QMainWindow):
         self.profile_edit_window.show()
         self.close()
 
+    @Slot(ProfileData)
     def forward_profile_created(self, profile_data):
         self.registrationCompleted.emit(profile_data)
 

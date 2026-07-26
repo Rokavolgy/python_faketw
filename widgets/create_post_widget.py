@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QWidget,
@@ -85,6 +85,7 @@ class CreatePostWidget(QWidget):
 
         layout.addLayout(buttons_layout)
 
+    @Slot()
     def select_image(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Image", "", "Image Files (*.png *.jpg *.jpeg *.gif)"
@@ -105,12 +106,14 @@ class CreatePostWidget(QWidget):
         # self.image_preview.setPixmap(scaled_pixmap)
         # self.image_preview.setVisible(True)
 
+    @Slot()
     def remove_image(self):
         self.selected_image_path = None
         self.image_preview.clear()
         self.image_preview.setVisible(False)
         self.remove_image_btn.setVisible(False)
 
+    @Slot()
     def submit_post(self):
         content = self.content_editor.toPlainText().strip()
 

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
-@dataclass
+@dataclass(slots=True)
 class CommentData:
     id: str
     postId: str
