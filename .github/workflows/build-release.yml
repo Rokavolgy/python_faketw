@@ -69,7 +69,6 @@ jobs:
         if: runner.os == 'Windows'
         uses: Nuitka/Nuitka-Action@main
         with:
-          nuitka-version: "4.0"
           script-name: main_window.py
           mode: standalone
           enable-plugins: pyside6
@@ -77,18 +76,32 @@ jobs:
           output-dir: build
           windows-console-mode: disable
           include-data-dir: res=res
+          include-module: |
+            PIL.AvifImagePlugin
+            PIL._avif
 
       - name: Build Linux application
         if: runner.os == 'Linux'
         uses: Nuitka/Nuitka-Action@main
         with:
-          nuitka-version: "4.0"
           script-name: main_window.py
           mode: standalone
           enable-plugins: pyside6
           output-file: Fwitter
           output-dir: build
           include-data-dir: res=res
+          include-module: |
+            PIL.AvifImagePlugin
+            PIL._avif
+
+      - name: Verify AVIF codec in Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: build/main_window.dist/Fwitter.exe --check-avif
+
+      - name: Verify AVIF codec in Linux build
+        if: runner.os == 'Linux'
+        run: build/main_window.dist/Fwitter --check-avif
 
       - name: Stage Windows application
         if: runner.os == 'Windows'

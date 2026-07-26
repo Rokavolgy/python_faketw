@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import List, Optional, Tuple
 
-from PIL import Image
+from PIL import AvifImagePlugin, Image
 from PySide6.QtCore import QTimer, Signal, QSize, Slot, Qt
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QLabel
@@ -16,6 +16,25 @@ from controller.media_store import MediaStore
 MAX_ANIMATED_AVIF_FRAMES = 90
 MAX_DECODED_AVIF_BYTES = 48 * 1024 * 1024
 logger = logging.getLogger(__name__)
+
+
+def avif_codec_self_test() -> bool:
+    """Exercise Pillow's packaged AVIF encoder and decoder."""
+    if not AvifImagePlugin.SUPPORTED:
+        return False
+
+    try:
+        buffer = BytesIO()
+        Image.new("RGBA", (2, 2), (32, 96, 160, 255)).save(
+            buffer, format="AVIF"
+        )
+        buffer.seek(0)
+        with Image.open(buffer) as image:
+            image.load()
+            return image.format == "AVIF" and image.size == (2, 2)
+    except Exception:
+        logger.exception("Pillow AVIF codec self-test failed")
+        return False
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,3 +1,35 @@
+# nuitka-project: --enable-plugin=pyside6
+# nuitka-project: --python-flag=no_docstrings
+# nuitka-project: --python-flag=no_site
+# nuitka-project: --python-flag=no_asserts
+# nuitka-project: --python-flag=no_warnings
+# nuitka-project: --remove-output
+# nuitka-project: --nofollow-import-to=PIL.ImageEnhance
+# nuitka-project: --nofollow-import-to=PIL.ImageMorph
+# nuitka-project: --nofollow-import-to=PIL.PdfImagePlugin
+# nuitka-project: --nofollow-import-to=PIL.PalmImagePlugin
+# nuitka-project: --nofollow-import-to=PIL.ImageFilter
+# nuitka-project: --nofollow-import-to=PIL.ImageTk
+# nuitka-project: --nofollow-import-to=PIL.ImageWin
+# nuitka-project: --nofollow-import-to=PIL.BufrStubImagePlugin
+# nuitka-project: --nofollow-import-to=PIL.GribStubImagePlugin
+# nuitka-project: --nofollow-import-to=PIL.MpegImagePlugin
+# nuitka-project: --nofollow-import-to=PIL.Hdf5StubImagePlugin
+# nuitka-project: --nofollow-import-to=PIL.PsdImagePlugin
+# nuitka-project: --noinclude-qt-plugins=tls
+# nuitka-project: --noinclude-qt-plugins=iconengines
+# nuitka-project: --noinclude-qt-plugins=printsupport
+# nuitka-project: --nofollow-import-to=PySide6.QtNetwork
+# nuitka-project  --nofollow-import-to=webbrowser
+# nuitka-project: --nofollow-import-to=tarfile
+# nuitka-project: --nofollow-import-to=tomllib
+# nuitka-project: --nofollow-import-to=bz2
+# nuitka-project: --nofollow-import-to=unittest
+# nuitka-project: --nofollow-import-to=PIL.ImageCms
+# nuitka-project: --nofollow-import-to=_imagingtk
+
+
+
 import logging
 import sys
 
@@ -96,6 +128,15 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+    if "--check-avif" in sys.argv:
+        from widgets.avif_widget import avif_codec_self_test
+
+        if avif_codec_self_test():
+            print("AVIF codec check passed")
+            sys.exit(0)
+        print("AVIF codec check failed", file=sys.stderr)
+        sys.exit(1)
+
     app = QApplication(sys.argv)
     window = MainWindow()
 
