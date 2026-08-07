@@ -1,14 +1,31 @@
 import logging
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import Query
+from google.cloud.firestore_v1 import Query, SERVER_TIMESTAMP
 
 from controller.firebase_client import fetch_user_info, get_db
 from controller.like_controller import fetch_user_likes
+from controller.post_action_client import send_post_action
+from controller.supabase_storage_client import SupabaseStorageClient
+from controller.user_session import UserSession
 from modal import post
+from modal.constants import Constants
 from modal.user import ProfileData
 
 logger = logging.getLogger(__name__)
+
+
+@firestore.transactional
+def _commit_new_post(transaction, post_ref, rate_limit_ref, post_dict):
+    rate_limit_ref.get(transaction=transaction)
+    transaction.set(post_ref, post_dict)
+    transaction.set(
+        rate_limit_ref,
+        {
+            "lastPostAt": SERVER_TIMESTAMP,
+            "lastPostId": post_dict["id"],
+        },
+    )
 
 
 def fetch_posts():
@@ -100,7 +117,14 @@ def fetch_post_by_id(post_id, user_likes=None):
 def create_new_post(post_data):
     try:
         post_dict = post_data.to_dict(post_data)
-        get_db().collection("posts").add(post_dict, post_dict["id"])
+        database = get_db()
+        post_ref = database.collection("posts").document(post_dict["id"])
+        rate_limit_ref = database.collection("postRateLimits").document(
+            post_dict["userId"]
+        )
+        _commit_new_post(
+            database.transaction(), post_ref, rate_limit_ref, post_dict
+        )
         return True
     except Exception as e:
         logger.exception("Error creating post")
@@ -108,10 +132,23 @@ def create_new_post(post_data):
 
 
 def delete_post(post_id):
-    try:
-        post_ref = get_db().collection("posts").document(post_id)
-        post_ref.delete()
-        return True
-    except Exception as e:
-        logger.exception("Error deleting post %s", post_id)
+    result = send_post_action({"action": "deletePost", "postId": post_id})
+    if not result or not result.get("deleted"):
         return False
+
+    media_urls = result.get("mediaUrls")
+    if isinstance(media_urls, list):
+        expected_prefix = f"post-images/{UserSession().user_id}/"
+        owned_paths = [
+            path
+            for path in media_urls
+            if isinstance(path, str)
+               and path.startswith(expected_prefix)
+               and path.lower().endswith((".webp", ".avif"))
+        ]
+        if owned_paths:
+            try:
+                SupabaseStorageClient().delete(Constants.PUBLIC_IMAGE_BUCKET, owned_paths)
+            except Exception:
+                logger.exception("Unable to clean up media for deleted post %s", post_id)
+    return True

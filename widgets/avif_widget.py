@@ -1,5 +1,4 @@
 import hashlib
-import logging
 import math
 import os
 from dataclasses import dataclass
@@ -15,7 +14,9 @@ from controller.media_store import MediaStore
 
 MAX_ANIMATED_AVIF_FRAMES = 90
 MAX_DECODED_AVIF_BYTES = 48 * 1024 * 1024
-logger = logging.getLogger(__name__)
+
+
+# logger = logging.getLogger(__name__)
 
 
 def avif_codec_self_test() -> bool:
@@ -33,7 +34,7 @@ def avif_codec_self_test() -> bool:
             image.load()
             return image.format == "AVIF" and image.size == (2, 2)
     except Exception:
-        logger.exception("Pillow AVIF codec self-test failed")
+        #logger.exception("Pillow AVIF codec self-test failed")
         return False
 
 
@@ -90,7 +91,7 @@ class AvifMovie:
             return self._finish_decode(cache_key)
 
         except Exception as e:
-            logger.exception("Error loading AVIF file %s", filename)
+            #logger.exception("Error loading AVIF file %s", filename)
             return False
 
     def setData(self, data: bytes) -> bool:
@@ -112,7 +113,7 @@ class AvifMovie:
             return self._finish_decode(cache_key)
 
         except Exception as e:
-            logger.exception("Error loading AVIF data")
+            #logger.exception("Error loading AVIF data")
             return False
 
     def _load_single_frame(self, img: Image.Image):
@@ -166,7 +167,8 @@ class AvifMovie:
                 self.durations.append(duration)
 
         except Exception as e:
-            logger.exception("Error processing AVIF frames")
+            pass
+            #logger.exception("Error processing AVIF frames")
 
     def _pil_to_qpixmap(self, pil_image: Image.Image) -> QPixmap:
         """Convert PIL Image to QPixmap"""
@@ -222,7 +224,7 @@ class AvifMovie:
             return None
         return self.scaled_size.width(), self.scaled_size.height()
 
-    def setScaledSize(self, size: QSize):
+    def set_scaled_size(self, size: QSize):
         """Set the scaled size for frames"""
         self.scaled_size = size
 
@@ -268,7 +270,7 @@ class AvifMovie:
         self._is_valid = False
         self._shared_frame_set = None
 
-    def setPaused(self, paused: bool):
+    def set_paused(self, paused: bool):
         """Pause or resume the animation"""
         if paused:
             self.timer.stop()
@@ -292,21 +294,21 @@ class AvifMovie:
         if len(self.frames) > 1:
             self.timer.start(self.durations[self.current_frame])
 
-    def currentPixmap(self) -> Optional[QPixmap]:
+    def current_pixmap(self) -> Optional[QPixmap]:
         """Get the current frame as QPixmap"""
         if not self.frames or self.current_frame >= len(self.frames):
             return None
         return self.frames[self.current_frame]
 
-    def frameCount(self) -> int:
+    def frame_count(self) -> int:
         """Get the total number of frames"""
         return len(self.frames)
 
-    def isValid(self) -> bool:
+    def is_valid(self) -> bool:
         """Check if the movie is valid"""
         return self._is_valid
 
-    def currentFrameNumber(self) -> int:
+    def current_frame_number(self) -> int:
         """Get the current frame number"""
         return self.current_frame
 
@@ -335,7 +337,7 @@ class AvifWidget(QLabel):
 
         self.avif_movie = movie
 
-        if movie and movie.isValid():
+        if movie and movie.is_valid():
             self._update_timer.start(50)  # Update display every 50ms
             self._update_display()
 
@@ -343,7 +345,7 @@ class AvifWidget(QLabel):
         """Load and set AVIF file directly"""
         movie = AvifMovie(self)
         if self._scaled_size:
-            movie.setScaledSize(self._scaled_size)
+            movie.set_scaled_size(self._scaled_size)
         if movie.setFileName(filename):
             self.setAvifMovie(movie)
             return True
@@ -353,7 +355,7 @@ class AvifWidget(QLabel):
         """Load and set AVIF from byte data"""
         movie = AvifMovie(self)
         if self._scaled_size:
-            movie.setScaledSize(self._scaled_size)
+            movie.set_scaled_size(self._scaled_size)
         if movie.setData(data):
             self.setAvifMovie(movie)
             return True
@@ -392,13 +394,13 @@ class AvifWidget(QLabel):
     def setPaused(self, paused: bool):
         """Pause or resume the animation"""
         if self.avif_movie:
-            self.avif_movie.setPaused(paused)
+            self.avif_movie.set_paused(paused)
 
-    def setScaledSize(self, size: QSize):
+    def set_scaled_size(self, size: QSize):
         """Set the scaled size for the AVIF"""
         self._scaled_size = size
         if self.avif_movie:
-            self.avif_movie.setScaledSize(size)
+            self.avif_movie.set_scaled_size(size)
 
     @Slot()
     def _update_display(self):
@@ -406,19 +408,19 @@ class AvifWidget(QLabel):
         if not self.avif_movie:
             return
 
-        current_pixmap = self.avif_movie.currentPixmap()
+        current_pixmap = self.avif_movie.current_pixmap()
         if current_pixmap:
             self.setPixmap(current_pixmap)
-            self.frameChanged.emit(self.avif_movie.currentFrameNumber())
+            self.frameChanged.emit(self.avif_movie.current_frame_number())
 
     def isAnimated(self) -> AvifMovie | None | bool:
         """Check if the current AVIF is animated"""
-        return self.avif_movie and self.avif_movie.frameCount() > 1
+        return self.avif_movie and self.avif_movie.frame_count() > 1
 
     def frameCount(self) -> int:
         """Get the total number of frames"""
-        return self.avif_movie.frameCount() if self.avif_movie else 0
+        return self.avif_movie.frame_count() if self.avif_movie else 0
 
     def currentFrameNumber(self) -> int:
         """Get the current frame number"""
-        return self.avif_movie.currentFrameNumber() if self.avif_movie else 0
+        return self.avif_movie.current_frame_number() if self.avif_movie else 0

@@ -2,7 +2,6 @@ import json
 import logging
 
 import requests
-from PySide6.QtWidgets import QMessageBox
 from google.cloud.firestore import Client
 from google.oauth2.credentials import Credentials
 from requests.exceptions import HTTPError
@@ -13,6 +12,7 @@ from controller.user_session import UserSession
 from modal.user import ProfileData
 
 logger = logging.getLogger(__name__)
+AUTH_REQUEST_TIMEOUT = (5, 20)
 
 
 def sign_in_with_email_and_password(api_key, email, password):
@@ -20,12 +20,17 @@ def sign_in_with_email_and_password(api_key, email, password):
     headers = {"content-type": "application/json; charset=UTF-8"}
     data = json.dumps({"email": email, "password": password, "returnSecureToken": True})
 
-    req = requests.post(request_url, headers=headers, data=data)
+    req = requests.post(
+        request_url,
+        headers=headers,
+        data=data,
+        timeout=AUTH_REQUEST_TIMEOUT,
+    )
 
     try:
         req.raise_for_status()
-    except HTTPError as e:
-        raise HTTPError(e, req.text)
+    except HTTPError as error:
+        raise HTTPError(f"{error}: {req.text}", response=req) from error
 
     return req.json()
 
@@ -36,7 +41,12 @@ def register_user(email, password):
         headers = {"content-type": "application/json; charset=UTF-8"}
         data = json.dumps({"email": email, "password": password, "returnSecureToken": True})
 
-        req = requests.post(request_url, headers=headers, data=data)
+        req = requests.post(
+            request_url,
+            headers=headers,
+            data=data,
+            timeout=AUTH_REQUEST_TIMEOUT,
+        )
         req.raise_for_status()
         response = req.json()
 
@@ -50,12 +60,13 @@ def register_user(email, password):
         set_db(Client(PROJECT_ID, creds))
 
         return True, response
-    except Exception as e:
+    except Exception:
         logger.exception("Registration failed")
         return False, None
 
 
 def login_user(email, password):
+    response = None
     try:
         response = sign_in_with_email_and_password(API_KEY, email, password)
         user_session = UserSession()
@@ -72,19 +83,15 @@ def login_user(email, password):
             profile_data = ProfileData.from_dict(user_info)
             user_session.set_profile_data(profile_data)
         else:
-            QMessageBox.warning(
-                None,
-                "Warning",
-                "You haven't created a profile yet. Default values have been filled. ",
-                QMessageBox.Ok,
-            )
+            logger.info("No profile found for %s; creating defaults", user_session.user_id)
             default_profile = default_profile_for_user(
                 user_session.user_id, email, ProfileData
             )
             user_session.set_profile_data(default_profile)
-            create_user_profile(user_session.user_id, default_profile)
+            if not create_user_profile(user_session.user_id, default_profile):
+                raise RuntimeError("Unable to create the default user profile")
         logger.debug("User profile loaded for %s", user_session.user_id)
         return True, response
-    except Exception as e:
+    except Exception:
         logger.exception("Login failed")
         return False, response

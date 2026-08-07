@@ -1,6 +1,6 @@
 import sys
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal, Slot
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -14,7 +14,31 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from controller.auth_controller import login_user
+
+def login_user(email, password):
+    from controller.auth_controller import login_user as authenticate
+
+    return authenticate(email, password)
+
+
+class LoginTaskSignals(QObject):
+    finished = Signal(bool, object)
+
+
+class LoginTask(QRunnable):
+    def __init__(self, email, password):
+        super().__init__()
+        self.email = email
+        self.password = password
+        self.signals = LoginTaskSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            success, user_data = login_user(self.email, self.password)
+        except Exception:
+            success, user_data = False, None
+        self.signals.finished.emit(success, user_data)
 
 
 class LoginWindow(QMainWindow):
@@ -23,6 +47,9 @@ class LoginWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.thread_pool = QThreadPool.globalInstance()
+        self._login_in_progress = False
+        self._login_task = None
         self.setWindowTitle("Login - Fwitter")
         self.setFixedSize(400, 600)
 
@@ -92,6 +119,7 @@ class LoginWindow(QMainWindow):
         """
         )
         self.login_button.clicked.connect(self.authenticate_user)
+        self.password_edit.returnPressed.connect(self.authenticate_user)
         form_layout.addWidget(self.login_button)
 
         # Regisztráció
@@ -119,6 +147,9 @@ class LoginWindow(QMainWindow):
     @Slot()
     def authenticate_user(self):
         """Authenticate the user with the provided credentials"""
+        if self._login_in_progress:
+            return
+
         username = self.username_edit.text().strip()
         password = self.password_edit.text().strip()
 
@@ -129,22 +160,28 @@ class LoginWindow(QMainWindow):
             )
             return
 
-        try:
+        self._set_login_in_progress(True)
+        self._login_task = LoginTask(username, password)
+        self._login_task.signals.finished.connect(self._on_login_finished)
+        self.thread_pool.start(self._login_task)
 
-            success, user_data = login_user(username, password)
+    def _set_login_in_progress(self, in_progress):
+        self._login_in_progress = in_progress
+        self.login_button.setEnabled(not in_progress)
+        self.username_edit.setEnabled(not in_progress)
+        self.password_edit.setEnabled(not in_progress)
+        self.login_button.setText("Logging in..." if in_progress else "Login")
 
-            if success:
+    @Slot(bool, object)
+    def _on_login_finished(self, success, _user_data):
+        self._login_task = None
+        self._set_login_in_progress(False)
+        if success:
+            self.loginSuccessful.emit()
+            self.close()
+            return
 
-                self.loginSuccessful.emit()
-                self.close()
-            else:
-                QMessageBox.warning(
-                    self, "Login Failed", "Invalid username or password"
-                )
-            self.login_button.setText("Login")
-
-        except Exception:
-            QMessageBox.critical(self, "Error", "Invalid username or password")
+        QMessageBox.warning(self, "Login failed", "Invalid username or password")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QWidget,
-    QScrollArea,
     QPushButton,
 )
 
@@ -23,7 +22,9 @@ from modal.constants import Constants
 from modal.post import PostData
 from modal.user import ProfileData
 from views.profile_edit_window import ProfileEditWindow
+from widgets.post_display import estimate_post_height, schedule_media_load
 from widgets.post_widget import PostWidget
+from widgets.virtualized_list import VirtualizedWidgetList
 
 
 class ProfileView(QMainWindow):
@@ -38,7 +39,7 @@ class ProfileView(QMainWindow):
         self.edit_window = None
         self.user_posts = []
         self.posts_scroll = None
-        self.posts_layout = None
+        self.post_list = None
         self._cleaned_up = False
 
         self.listener = FirestoreListener()
@@ -129,14 +130,18 @@ class ProfileView(QMainWindow):
         details_layout = QVBoxLayout(details_widget)
 
         # display name
-        display_name = QLabel(
+        display_name = QLabel()
+        display_name.setTextFormat(Qt.PlainText)
+        display_name.setText(
             self.profile_data.displayName if self.profile_data else "Unknown User"
         )
         display_name.setFont(QFont("Wix Madefor Text", 16, QFont.Bold))
         details_layout.addWidget(display_name)
 
         # username
-        username = QLabel(
+        username = QLabel()
+        username.setTextFormat(Qt.PlainText)
+        username.setText(
             f"@{self.profile_data.username}"
             if self.profile_data and self.profile_data.username
             else ""
@@ -146,7 +151,9 @@ class ProfileView(QMainWindow):
 
         # bio
         if self.profile_data and self.profile_data.bio:
-            bio = QLabel(self.profile_data.bio)
+            bio = QLabel()
+            bio.setTextFormat(Qt.PlainText)
+            bio.setText(self.profile_data.bio)
             bio.setWordWrap(True)
             details_layout.addWidget(bio)
 
@@ -157,11 +164,15 @@ class ProfileView(QMainWindow):
 
         if self.profile_data:
             if self.profile_data.location:
-                location = QLabel(f"📍 {self.profile_data.location}")
+                location = QLabel()
+                location.setTextFormat(Qt.PlainText)
+                location.setText(f"📍 {self.profile_data.location}")
                 meta_layout.addWidget(location)
 
             if self.profile_data.website:
-                website = QLabel(f"🔗 {self.profile_data.website}")
+                website = QLabel()
+                website.setTextFormat(Qt.PlainText)
+                website.setText(f"🔗 {self.profile_data.website}")
                 meta_layout.addWidget(website)
 
             if self.profile_data.createdAt:
@@ -190,6 +201,10 @@ class ProfileView(QMainWindow):
             )
             edit_button.clicked.connect(self.open_profile_edit)
             details_layout.addWidget(edit_button)
+        elif user_session.is_authenticated:
+            message_button = QPushButton("Message")
+            message_button.clicked.connect(self.open_message)
+            details_layout.addWidget(message_button)
         info_layout.addWidget(details_widget, 1)
         header_layout.addWidget(info_widget)
 
@@ -205,9 +220,19 @@ class ProfileView(QMainWindow):
         self.edit_window = ProfileEditWindow(self.profile_data)
         self.edit_window.profileUpdated.connect(self.on_profile_updated)
 
+    @Slot()
+    def open_message(self):
+        if self.parent_window and self.user_id:
+            self.parent_window.show_chat_view(self.user_id)
+
     @Slot(ProfileData)
     def on_profile_updated(self, updated_profile):
         self.profile_data = updated_profile
+
+        if self.post_list:
+            self.post_list.clear_items()
+            self.post_list = None
+            self.posts_scroll = None
 
         old_widget = self.centralWidget()
         if old_widget:
@@ -216,14 +241,20 @@ class ProfileView(QMainWindow):
         self.init_ui()
 
     def create_posts_section(self):
-        self.posts_scroll = QScrollArea()
-        self.posts_scroll.setWidgetResizable(True)
+        self.post_list = VirtualizedWidgetList(
+            widget_factory=self.create_profile_post_widget,
+            key_for_item=lambda post: post.id,
+            estimate_height=self.estimate_profile_post_height,
+            widget_binder=lambda widget, post: widget.bind_post(post),
+            materialized=self.on_post_materialized,
+            dematerialized=self.on_post_dematerialized,
+            can_recycle=lambda widget: widget.can_recycle(),
+            overscan_rows=2,
+        )
+        self.posts_scroll = self.post_list
         self.posts_scroll.verticalScrollBar().valueChanged.connect(
             self.schedule_lazy_media_loads
         )
-
-        container = QWidget()
-        self.posts_layout = QVBoxLayout(container)
 
         user_session = UserSession()
         self.user_posts = fetch_posts_and_user_info(
@@ -232,16 +263,28 @@ class ProfileView(QMainWindow):
             current_user_id=user_session.user_id,
             user_likes=user_session.user_likes or [],
         )
-        for post in self.user_posts:
-            post_widget = PostWidget(post, hide_buttons=True)
-            post_widget.deleteClicked.connect(delete_post_2)
-            self.posts_layout.addWidget(post_widget)
-
-        self.posts_layout.addStretch()
-        self.posts_scroll.setWidget(container)
+        self.post_list.set_items(self.user_posts)
         self.schedule_lazy_media_loads()
 
         return self.posts_scroll
+
+    def on_post_materialized(self, widget):
+        widget.start_media_load()
+        if widget.post_data:
+            self.listener.subscribe_to_post_document(widget.post_data.id)
+
+    def on_post_dematerialized(self, widget):
+        if widget.post_data:
+            self.listener.unsubscribe_from_post_document(widget.post_data.id)
+
+    @staticmethod
+    def estimate_profile_post_height(post, viewport_width):
+        return estimate_post_height(post, viewport_width, base_height=105)
+
+    def create_profile_post_widget(self, post):
+        post_widget = PostWidget(post, hide_buttons=True)
+        post_widget.deleteClicked.connect(delete_post_2)
+        return post_widget
 
     @Slot(PostData, bool)
     def on_post_notification(self, post_data, _should_notify=False):
@@ -251,18 +294,13 @@ class ProfileView(QMainWindow):
         for i, post in enumerate(self.user_posts):
             if post.id == post_data.id:
                 self.user_posts[i] = post_data
-
-                for j in range(self.posts_layout.count() - 1):
-                    widget = self.posts_layout.itemAt(j).widget()
-                    if isinstance(widget, PostWidget) and widget.post_data.id == post_data.id:
-                        widget.post_data = post_data
-                        widget.update()
-                        return
+                if self.post_list:
+                    self.post_list.update_item(post_data)
+                return
 
         self.user_posts.insert(0, post_data)
-        post_widget = PostWidget(post_data)
-        post_widget.deleteClicked.connect(delete_post_2)
-        self.posts_layout.insertWidget(0, post_widget)
+        if self.post_list:
+            self.post_list.insert_item(0, post_data)
         self.schedule_lazy_media_loads()
 
     @Slot(str)
@@ -270,13 +308,8 @@ class ProfileView(QMainWindow):
         for i, post in enumerate(self.user_posts):
             if post.id == post_id:
                 del self.user_posts[i]
-
-                for j in range(self.posts_layout.count() - 1):  # Excluding stretch item
-                    widget = self.posts_layout.itemAt(j).widget()
-                    if isinstance(widget, PostWidget) and widget.post_data.id == post_id:
-                        self.posts_layout.removeWidget(widget)
-                        widget.cleanup_and_delete()
-                        break
+                if self.post_list:
+                    self.post_list.remove_key(post_id)
                 break
 
     def closeEvent(self, event):
@@ -285,30 +318,16 @@ class ProfileView(QMainWindow):
 
     @Slot()
     def schedule_lazy_media_loads(self):
-        QTimer.singleShot(0, self.load_visible_media)
+        schedule_media_load(self.load_visible_media)
 
     @Slot()
     def load_visible_media(self):
-        if not self.posts_scroll or not self.posts_layout:
+        if not self.post_list:
             return
 
-        scrollbar = self.posts_scroll.verticalScrollBar()
-        viewport_top = scrollbar.value()
-        viewport_bottom = viewport_top + self.posts_scroll.viewport().height()
-        preload_margin = 700
-
-        for i in range(self.posts_layout.count()):
-            item = self.posts_layout.itemAt(i)
-            widget = item.widget() if item else None
-            if not isinstance(widget, PostWidget):
-                continue
-
-            geometry = widget.geometry()
-            if (
-                    geometry.bottom() >= viewport_top - preload_margin
-                    and geometry.top() <= viewport_bottom + preload_margin
-            ):
-                widget.start_media_load()
+        self.post_list.schedule_sync()
+        for widget in self.post_list.active_widgets():
+            widget.start_media_load()
 
     def cleanup(self):
         if self._cleaned_up:
@@ -323,11 +342,8 @@ class ProfileView(QMainWindow):
             except Exception:
                 pass
 
-        if self.posts_layout:
-            for i in reversed(range(self.posts_layout.count())):
-                widget = self.posts_layout.itemAt(i).widget()
-                if isinstance(widget, PostWidget):
-                    widget.cleanup_and_delete()
+        if self.post_list:
+            self.post_list.clear_items()
 
         if self.cover_image:
             self.cover_image.clear()
@@ -343,7 +359,7 @@ class ProfileView(QMainWindow):
         self.cover_image = None
         self.profile_pic = None
         self.posts_scroll = None
-        self.posts_layout = None
+        self.post_list = None
         QPixmapCache.clear()
         QTimer.singleShot(0, gc.collect)
 

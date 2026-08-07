@@ -194,7 +194,6 @@ class SignupWindow(QMainWindow):
         self.registrationCompleted.emit(profile_data)
 
 
-# for testing (will crash)
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SignupWindow()

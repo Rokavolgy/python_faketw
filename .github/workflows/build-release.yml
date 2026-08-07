@@ -68,12 +68,17 @@ jobs:
       - name: Build Windows application
         if: runner.os == 'Windows'
         uses: Nuitka/Nuitka-Action@main
+        env:
+          CCFLAGS: " /Ox /GL /Gw"
+          LDFLAGS: " /LTCG /OPT:REF /OPT:ICF "
         with:
           script-name: main_window.py
           mode: standalone
           enable-plugins: pyside6
           output-file: Fwitter
           output-dir: build
+          lto: yes
+          msvc: latest
           windows-console-mode: disable
           include-data-dir: res=res
           include-module: |

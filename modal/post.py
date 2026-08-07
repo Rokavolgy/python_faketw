@@ -2,9 +2,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 
-from modal.user import ProfileData
-
-
 @dataclass(slots=True)
 class PostData:
     content: str

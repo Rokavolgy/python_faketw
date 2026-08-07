@@ -2,13 +2,14 @@ import io
 import logging
 import os
 import threading
-from datetime import datetime
+import uuid
 
-import requests
-from PIL import Image
+from PIL import Image, ImageOps
 from PySide6.QtCore import Signal, Slot, QObject
 
 from controller.profiler import track_execution_time
+from controller.supabase_storage_client import SupabaseStorageClient
+from controller.user_session import UserSession
 from modal.constants import Constants
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,6 @@ class ImageUploaderSignals(QObject):
 class ImageUploader:
     """Class to handle image uploading and compression"""
 
-    UPLOAD_URL = Constants.UPLOAD_URL
     STORAGE_URL = Constants.STORAGE_URL
     MAX_FILE_SIZE = Constants.MAX_FILE_SIZE
 
@@ -94,9 +94,12 @@ class ImageUploader:
             else:
                 if buffer.getbuffer().nbytes > self.MAX_FILE_SIZE:
                     logger.warning("AVIF converted from GIF is still too large")
-                    self.signals._failure_ready.emit("AVIF is too large after compression")
                     raise RuntimeError("AVIF is too large after compression")
                 return buffer
+
+        if isinstance(img, Image.Image):
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
         quality = 95
         current_size = float("inf")
@@ -141,10 +144,35 @@ class ImageUploader:
 
         output = io.BytesIO()
         img.save(output, format=img_format, quality=quality, optimize=True)
+        if output.tell() > self.MAX_FILE_SIZE:
+            raise RuntimeError("Image is too large after compression")
         output.seek(0)
         return output
 
-    def upload_image(self, image_path: str, compress: bool = True) -> None:
+    @staticmethod
+    def _destination(destination: str, recipient_id: str | None = None):
+        session = UserSession()
+        if not session.user_id:
+            raise RuntimeError("A Firebase login is required")
+        object_id = str(uuid.uuid4())
+        if destination == "message":
+            if not recipient_id:
+                raise ValueError("A recipient is required for message images")
+            first_uid, second_uid = sorted((session.user_id, recipient_id))
+            return (
+                Constants.MESSAGE_IMAGE_BUCKET,
+                f"direct/{first_uid}/{second_uid}/{session.user_id}/{object_id}",
+            )
+        folder = "post-images" if destination == "post" else "user-images"
+        return Constants.PUBLIC_IMAGE_BUCKET, f"{folder}/{session.user_id}/{object_id}"
+
+    def upload_image(
+            self,
+            image_path: str,
+            compress: bool = True,
+            destination: str = "profile",
+            recipient_id: str | None = None,
+    ) -> None:
         """
         Upload an image file to Supabase storage
 
@@ -154,23 +182,26 @@ class ImageUploader:
         """
 
         def upload_task():
+            try:
+                if compress:
+                    raw_data = self.compress_image(image_path).getvalue()
+                    is_avif_data = len(raw_data) >= 12 and raw_data[4:8] == b"ftyp"
+                    extension = "avif" if is_avif_data else "webp"
+                    content_type = f"image/{extension}"
+                else:
+                    with open(image_path, "rb") as image_file:
+                        raw_data = image_file.read()
+                    extension = os.path.splitext(image_path)[1].lower().lstrip(".")
+                    content_type = f"image/{'jpeg' if extension in ('jpg', 'jpeg') else extension}"
 
-            current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
-            file_name = "JPEG_" + current_datetime + ".dat"
-            if compress:
-                file_data = self.compress_image(image_path)
-                files = {"file": (file_name, file_data, "image/jpeg")}
-            else:
-                files = {"file": (file_name, open(image_path, "rb"))}
-
-            response = requests.post(self.UPLOAD_URL, files=files)
-
-            if response.status_code == 200:
+                bucket, path_without_extension = self._destination(destination, recipient_id)
+                path = f"{path_without_extension}.{extension}"
+                SupabaseStorageClient().upload(bucket, path, raw_data, content_type)
                 logger.info("Image upload completed")
-                self.signals._success_ready.emit(response.text)
-            else:
-                error_msg = f"Server error: {response.status_code}, {response.text}"
-                self.signals._failure_ready.emit(error_msg)
+                self.signals._success_ready.emit(path)
+            except Exception as exc:
+                logger.exception("Image upload failed")
+                self.signals._failure_ready.emit(str(exc))
 
         thread = threading.Thread(target=upload_task)
         thread.daemon = True

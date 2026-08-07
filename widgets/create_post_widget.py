@@ -29,10 +29,8 @@ class CreatePostWidget(QWidget):
         PostData
     )
 
-    def __init__(self, user_id, user_name):
+    def __init__(self):
         super().__init__()
-        self.user_id = user_id
-        self.user_name = user_name
         self.selected_image_path = None
         self.image_uploader = None
         self.init_ui()
@@ -40,11 +38,6 @@ class CreatePostWidget(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         self.setLayout(layout)
-
-        # header
-        # header_label = QLabel("Create New Post")
-        # header_label.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
-        # layout.addWidget(header_label)
 
         self.content_editor = QTextEdit()
         self.content_editor.setPlaceholderText("What's on your mind?")
@@ -55,7 +48,8 @@ class CreatePostWidget(QWidget):
         self.image_preview.setAlignment(Qt.AlignCenter)
         self.image_preview.setMinimumHeight(200)
         self.image_preview.setStyleSheet(
-            "background-color: #f0f0f0; border: 1px dashed #ccc;"
+            "background-color: palette(alternate-base); "
+            "border: 1px dashed palette(mid);"
         )
         self.image_preview.setVisible(False)
         layout.addWidget(self.image_preview)
@@ -63,7 +57,6 @@ class CreatePostWidget(QWidget):
         buttons_layout = QHBoxLayout()
 
         self.add_image_btn = QPushButton("Add Image")
-        self.add_image_btn.setIcon(QIcon.fromTheme("insert-image"))
         self.add_image_btn.clicked.connect(self.select_image)
         buttons_layout.addWidget(self.add_image_btn)
 
@@ -78,7 +71,8 @@ class CreatePostWidget(QWidget):
         # Post button
         self.post_btn = QPushButton("Post")
         self.post_btn.setStyleSheet(
-            "background-color: #1DA1F2; color: white; font-weight: bold;"
+            "background-color: palette(highlight); "
+            "color: palette(highlighted-text); font-weight: bold;"
         )
         self.post_btn.clicked.connect(self.submit_post)
         buttons_layout.addWidget(self.post_btn)
@@ -122,6 +116,11 @@ class CreatePostWidget(QWidget):
                 self, "Empty Post", "Please enter some text or add an image."
             )
             return
+        if len(content) > 4000:
+            QMessageBox.warning(
+                self, "Post Too Long", "Posts cannot exceed 4000 characters."
+            )
+            return
 
         self.post_btn.setEnabled(False)
         self.post_btn.setText("Posting...")
@@ -152,6 +151,7 @@ class CreatePostWidget(QWidget):
         self.image_uploader.signals.failure_signal.connect(on_upload_failure)
         self.image_uploader.upload_image(
             self.selected_image_path,
+            destination="post",
         )
 
     def create_post(self, content, image_url=None):
@@ -184,14 +184,14 @@ class CreatePostWidget(QWidget):
                 self.content_editor.clear()
                 self.remove_image()
 
-                # self.postCreated.emit(post)
             else:
                 QMessageBox.warning(
                     self, "Error", "Failed to create"
                 )
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"hiba: {str(e)}")
+        except Exception:
+            logger.exception("Post creation failed")
+            QMessageBox.critical(self, "Error", "Failed to create the post.")
 
         finally:
             self.post_btn.setEnabled(True)

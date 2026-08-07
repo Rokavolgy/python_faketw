@@ -1,5 +1,8 @@
+import hashlib
 import logging
 import os
+import tempfile
+from urllib.parse import urlsplit
 
 import requests
 from PySide6.QtCore import QRunnable, Slot, Signal, QObject
@@ -55,7 +58,7 @@ class ImageLoaderSignals(QObject):
     _gif_ready = Signal(tuple)
     _avif_ready = Signal(tuple)
     loaded_gif_signal = Signal(tuple)
-    loaded_avif_signal = Signal(tuple)  # New signal for AVIF data
+    loaded_avif_signal = Signal(tuple)
 
     def __init__(self, callback):
         super().__init__()
@@ -94,20 +97,21 @@ class ImageLoaderSignals(QObject):
 
 class ImageLoaderTask(QRunnable):
     """
-    A QRunnable task to load an image from a URL and cache it.
-    allow_gif: If True, allows GIFs to be loaded and cached as QMovie.
-    allow_avif: If True, allows AVIF files to be loaded and handled properly.
-    If False, GIFs/AVIF will be treated as regular images and loaded as QPixmap.
+    Load an image from a URL while coalescing and caching concurrent requests.
+
+    GIF and AVIF media are returned as typed file payloads when their respective
+    flags are enabled. Other supported media is returned as a QPixmap.
     """
 
     def __init__(self, image_url, callback, allow_gif=False, allow_avif=True, save_folder="cache",
-                 allow_cache_file=True):
+                 allow_cache_file=True, response_getter=None):
         super().__init__()
         self.image_url = image_url
         self.save_folder = save_folder
         self.allow_cache_file = allow_cache_file
         self.allow_gif = allow_gif
         self.allow_avif = allow_avif
+        self.response_getter = response_getter
         self.signals = ImageLoaderSignals(callback)
         self.loaded_gif_signal = self.signals.loaded_gif_signal
         self.loaded_avif_signal = self.signals.loaded_avif_signal
@@ -140,7 +144,7 @@ class ImageLoaderTask(QRunnable):
             self.signals._result_ready.emit(None)
 
     def _load_payload(self):
-        file_name = os.path.join(self.save_folder, os.path.basename(self.image_url))
+        file_name = self._cache_file_name()
         if self.allow_cache_file and os.path.exists(file_name):
             gif_bool = is_gif(file_name)
             avif_bool = is_avif(file_name)
@@ -148,8 +152,7 @@ class ImageLoaderTask(QRunnable):
             if gif_bool and self.allow_gif:
                 return "gif_file", file_name
             if avif_bool and self.allow_avif:
-                # Route all AVIF files through the custom decoder. Qt builds
-                # do not consistently include an AVIF QPixmap plugin.
+                # qt czrrently doesnt support avif
                 return "avif_file", file_name
 
             pixmap = QPixmap()
@@ -159,11 +162,25 @@ class ImageLoaderTask(QRunnable):
         if self.save_folder:
             os.makedirs(self.save_folder, exist_ok=True)
 
-        response = requests.get(self.image_url, timeout=(5, 20))
+        response = (
+            self.response_getter(self.image_url)
+            if self.response_getter
+            else requests.get(self.image_url, timeout=(5, 20))
+        )
         response.raise_for_status()
 
-        with open(file_name, "wb") as file:
-            file.write(response.content)
+        temporary_path = None
+        try:
+            descriptor, temporary_path = tempfile.mkstemp(
+                prefix=".media-", dir=os.path.dirname(file_name) or "."
+            )
+            with os.fdopen(descriptor, "wb") as file:
+                file.write(response.content)
+            os.replace(temporary_path, file_name)
+            temporary_path = None
+        finally:
+            if temporary_path and os.path.exists(temporary_path):
+                os.remove(temporary_path)
 
         gif_bool = is_gif(file_name)
         avif_bool = is_avif(file_name)
@@ -177,6 +194,14 @@ class ImageLoaderTask(QRunnable):
         if pixmap.loadFromData(response.content):
             return pixmap
         return None
+
+    def _cache_file_name(self):
+        image_url = str(self.image_url)
+        suffix = os.path.splitext(urlsplit(image_url).path)[1].lower()
+        if suffix not in {".avif", ".gif", ".jpeg", ".jpg", ".png", ".webp"}:
+            suffix = ".img"
+        digest = hashlib.sha256(image_url.encode("utf-8")).hexdigest()
+        return os.path.join(self.save_folder or ".", f"{digest}{suffix}")
 
     def _dispatch(self, payload):
         if isinstance(payload, tuple):

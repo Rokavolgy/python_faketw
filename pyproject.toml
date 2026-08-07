@@ -1,0 +1,17 @@
+[project]
+name = "socapp2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow~=12.3.0",
+    "Requests==2.33.0",
+    "google-cloud-firestore~=2.21.0",
+    "PySide6~=6.9.1",
+    "windows-toasts==1.3.1; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+admin = ["firebase-admin~=7.0.0"]
+diagnostics = ["psutil~=7.0"]

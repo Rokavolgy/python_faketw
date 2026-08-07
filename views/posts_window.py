@@ -1,9 +1,10 @@
 import logging
 import platform
-from datetime import datetime
 
-from PySide6.QtCore import Signal, Slot, QThreadPool, Qt, QTimer
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QScrollArea, QSizePolicy, QLabel
+from PySide6.QtCore import Signal, Slot, Qt
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QSizePolicy, QLabel, QPushButton,
+)
 
 from controller.firestore_listener import FirestoreListener, delete_post_2
 from controller.like_controller import fetch_user_likes
@@ -21,7 +22,9 @@ from controller.user_session import UserSession
 from modal.constants import Constants
 from modal.post import PostData
 from widgets.create_post_widget import CreatePostWidget
+from widgets.post_display import estimate_post_height, schedule_media_load
 from widgets.post_widget import PostWidget
+from widgets.virtualized_list import VirtualizedWidgetList
 
 logger = logging.getLogger(__name__)
 
@@ -36,15 +39,12 @@ def preload_while_fetching():
 class PostsWindow(QMainWindow):
     profileSwitchRequested = Signal(str)
     commentSwitchRequested = Signal(str)
-    initialFetchComplete = Signal(bool)
+    messagesRequested = Signal()
 
     def __init__(self):
         super().__init__()
-        # time log
-        self.time = datetime.now()
         self.loading_label = None
-        self.initial_load_count = 0
-        self.posts_layout = None
+        self.post_list = None
         self.scroll = None
         self.initial_fetch_done = False
         self.loading_more_posts = False
@@ -55,8 +55,7 @@ class PostsWindow(QMainWindow):
             self.toaster = WindowsToaster("Fwitter")
         else:
             self.toaster = None
-        self.thread_pool = QThreadPool.globalInstance()
-        self.listener = FirestoreListener(post_limit=40)
+        self.listener = FirestoreListener(post_limit=20)
         self.listener.newPostsSignal.connect(self.on_post_notification)
         self.listener.removeFromStoreSignal.connect(self.on_remove_from_store)
         self.listener.initialPostsLoadedSignal.connect(self.on_initial_fetch_complete)
@@ -68,47 +67,55 @@ class PostsWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("Posts Viewer")
-        self.setMinimumSize(600, 800)
+        self.setMinimumSize(540, 720)
 
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
+        self.post_list = VirtualizedWidgetList(
+            widget_factory=self.create_post_widget_for_data,
+            key_for_item=lambda post: post.id,
+            estimate_height=self.estimate_post_height,
+            widget_binder=lambda widget, post: widget.bind_post(post),
+            materialized=self.on_post_materialized,
+            dematerialized=self.on_post_dematerialized,
+            can_recycle=lambda widget: widget.can_recycle(),
+            overscan_rows=5,
+        )
+        self.scroll = self.post_list
         self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.scroll.setMaximumWidth(1000)
-        self.scroll.setAlignment(
-            Qt.AlignHCenter
-        )  # ysd
-
-        container = QWidget()
-        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.posts_layout = QVBoxLayout(container)
-
-        self.posts_layout.addStretch()
-
-        self.scroll.setWidget(container)
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.verticalScrollBar().valueChanged.connect(
             self.schedule_lazy_media_loads
         )
+
+        self.loading_label = QLabel("Refreshing posts...")
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(self.loading_label)
         main_layout.addWidget(self.scroll, 1)
 
-        self.create_post_widget = CreatePostWidget(
-            user_id="current_user_id", user_name="Your Username"
-        )
+        self.create_post_widget = CreatePostWidget()
         self.create_post_widget.postCreated.connect(self.on_post_created)
 
         self.create_post_widget.setMaximumHeight(200)
 
         main_layout.addWidget(self.create_post_widget)
 
+        self.messages_button = QPushButton("Messages")
+        self.messages_button.clicked.connect(self.messagesRequested.emit)
+        main_layout.addWidget(self.messages_button)
+
         self.setCentralWidget(main_widget)
 
-        self.loading_label = QLabel("Refreshing posts...")
-        self.loading_label.setAlignment(Qt.AlignCenter)
-        self.posts_layout.addWidget(self.loading_label)
+    def on_post_materialized(self, widget):
+        widget.start_media_load()
+        if widget.post_data:
+            self.listener.subscribe_to_post_document(widget.post_data.id)
+
+    def on_post_dematerialized(self, widget):
+        if widget.post_data:
+            self.listener.unsubscribe_from_post_document(widget.post_data.id)
 
     def preload_user_likes(self):
         user_session = UserSession()
@@ -117,42 +124,20 @@ class PostsWindow(QMainWindow):
         if user_session.is_authenticated:
             self.listener.set_user_likes(user_session.user_likes or [])
 
-    def add_post_widget(self, post: PostData):
-        post_widget = self.create_post_widget_for_data(post)
-        self.posts_layout.addWidget(post_widget, stretch=1)
-        self.schedule_lazy_media_loads()
-
-    def insert_post_widget_sorted(self, post: PostData):
-        post_widget = self.create_post_widget_for_data(post)
-        insert_index = self.get_sorted_insert_index(post)
-        self.posts_layout.insertWidget(insert_index, post_widget)
-        self.schedule_lazy_media_loads()
-
-    def get_sorted_insert_index(self, post: PostData):
-        if not self.posts_layout:
-            return 0
-
-        for i in range(self.posts_layout.count()):
-            item = self.posts_layout.itemAt(i)
-            widget = item.widget() if item else None
-            if not isinstance(widget, PostWidget):
-                continue
-            widget_post = getattr(widget, "post_data", None)
-            if not widget_post or not widget_post.timestamp:
-                continue
-            if post.timestamp and post.timestamp > widget_post.timestamp:
-                return i
-        return max(0, self.posts_layout.count() - 1)
-
     def insert_post_data_sorted(self, post: PostData):
         for i, existing_post in enumerate(self.posts_data):
             if existing_post.id == post.id:
                 self.posts_data[i] = post
-                return
+                self.post_list.update_item(post)
+                return i, False
             if post.timestamp and existing_post.timestamp and post.timestamp > existing_post.timestamp:
                 self.posts_data.insert(i, post)
-                return
+                self.post_list.insert_item(i, post)
+                return i, True
         self.posts_data.append(post)
+        row = len(self.posts_data) - 1
+        self.post_list.insert_item(row, post)
+        return row, True
 
     def oldest_loaded_timestamp(self):
         timestamps = [
@@ -169,19 +154,9 @@ class PostsWindow(QMainWindow):
         post_widget.deleteClicked.connect(delete_post_2)
         return post_widget
 
-    def find_post_widget(self, post_id):
-        if not self.posts_layout:
-            return None
-
-        for i in range(self.posts_layout.count()):
-            item = self.posts_layout.itemAt(i)
-            widget = item.widget() if item else None
-            if not isinstance(widget, PostWidget):
-                continue
-            post_data = getattr(widget, "post_data", None)
-            if post_data and post_data.id == post_id:
-                return widget
-        return None
+    @staticmethod
+    def estimate_post_height(post: PostData, viewport_width: int):
+        return estimate_post_height(post, viewport_width, base_height=155)
 
     @Slot(str)
     def switch_to_profile_mode(self, userId):
@@ -195,29 +170,20 @@ class PostsWindow(QMainWindow):
 
     @Slot(PostData)
     def on_post_created(self, new_post: PostData):
-        if self.find_post_widget(new_post.id):
+        if any(post.id == new_post.id for post in self.posts_data):
             return
-        self.insert_post_widget_sorted(new_post)
         self.insert_post_data_sorted(new_post)
 
     @Slot(PostData, bool)
     def on_post_notification(self, post_data: PostData, should_notify=False):
-        # search
         post_data.likedByCurrentUser = UserSession().check_if_user_liked(post_data.id)
 
-        if self.initial_fetch_done:
-            for i, post in enumerate(self.posts_data):
-                if post.id == post_data.id:
-                    logger.debug("Updating existing post %s", post_data.id)
-                    self.posts_data[i] = post_data
-
-                    # Adat frissítés
-                    post_widget = self.find_post_widget(post_data.id)
-                    if post_widget:
-                        post_widget.post_data = post_data
-                        post_widget.refresh_ui()  # renamed from update()
-
-                    return
+        for i, post in enumerate(self.posts_data):
+            if post.id == post_data.id:
+                logger.debug("Updating existing post %s", post_data.id)
+                self.posts_data[i] = post_data
+                self.post_list.update_item(post_data)
+                return
         self.insert_post_data_sorted(post_data)
 
         if should_notify and not UserSession().user_id == post_data.userId:
@@ -231,20 +197,11 @@ class PostsWindow(QMainWindow):
                 else:
                     self.toast.display_image = None
                 self.toaster.show_toast(self.toast)
-        # új widget mint an onpostcreated ben
-
-        if self.initial_fetch_done:
-            self.insert_post_widget_sorted(post_data)
-        else:
-            self.add_post_widget(post_data)
         self.schedule_lazy_media_loads()
 
     @Slot(str)
     def on_remove_from_store(self, post_id):
-        post_widget = self.find_post_widget(post_id)
-        if post_widget:
-            post_widget.cleanup_and_delete()
-            self.posts_layout.removeWidget(post_widget)
+        if self.post_list and self.post_list.remove_key(post_id):
             logger.debug("Removed post %s from the feed", post_id)
 
         self.posts_data = [
@@ -256,36 +213,25 @@ class PostsWindow(QMainWindow):
         self.initial_fetch_done = True
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.listener.initialPostsLoadedSignal.disconnect()
-        self.loading_label.deleteLater()
+        if self.loading_label:
+            self.loading_label.deleteLater()
+            self.loading_label = None
         self.schedule_lazy_media_loads()
 
     @Slot()
     def schedule_lazy_media_loads(self):
-        QTimer.singleShot(0, self.load_visible_media)
+        schedule_media_load(self.load_visible_media)
 
     @Slot()
     def load_visible_media(self):
-        if not self.scroll or not self.posts_layout:
+        if not self.post_list:
             return
 
+        self.post_list.schedule_sync()
+        for widget in self.post_list.active_widgets():
+            widget.start_media_load()
+
         scrollbar = self.scroll.verticalScrollBar()
-        viewport_top = scrollbar.value()
-        viewport_bottom = viewport_top + self.scroll.viewport().height()
-        preload_margin = 700
-
-        for i in range(self.posts_layout.count()):
-            item = self.posts_layout.itemAt(i)
-            widget = item.widget() if item else None
-            if not isinstance(widget, PostWidget):
-                continue
-
-            geometry = widget.geometry()
-            if (
-                    geometry.bottom() >= viewport_top - preload_margin
-                    and geometry.top() <= viewport_bottom + preload_margin
-            ):
-                widget.start_media_load()
-
         if (
                 self.initial_fetch_done
                 and not self.loading_more_posts
@@ -310,14 +256,19 @@ class PostsWindow(QMainWindow):
             self.reached_end_of_feed = True
 
         for post in older_posts:
-            if self.find_post_widget(post.id):
+            if any(existing.id == post.id for existing in self.posts_data):
                 continue
             post.likedByCurrentUser = UserSession().check_if_user_liked(post.id)
             self.insert_post_data_sorted(post)
-            self.insert_post_widget_sorted(post)
 
         self.loading_more_posts = False
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.schedule_lazy_media_loads()
+
+    def closeEvent(self, event):
+        self.listener.stop_listening()
+        if self.post_list:
+            self.post_list.clear_items()
+        super().closeEvent(event)

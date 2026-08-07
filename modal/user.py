@@ -1,12 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-UPLOAD_URL = "https://lhojsvnzsgqzalyzmkne.supabase.co/functions/v1/storage-upload"
-STORAGE_URL = (
-    "https://lhojsvnzsgqzalyzmkne.supabase.co/storage/v1/object/public/faktw2/"
-)
-
-
 @dataclass(slots=True)
 class ProfileData:
     id: str

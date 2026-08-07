@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
         self.posts_view = None
         self.setWindowTitle("Fwitter")
         self.setMinimumSize(600, 800)
-        self.setMaximumWidth(1000)
+        self.setMaximumWidth(1200)
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
@@ -105,6 +105,7 @@ class MainWindow(QMainWindow):
         self.posts_view = PostsWindow()
         self.posts_view.profileSwitchRequested.connect(self.show_profile_view)
         self.posts_view.commentSwitchRequested.connect(self.show_comment_view)
+        self.posts_view.messagesRequested.connect(self.show_messages_view)
         self.stacked_widget.addWidget(self.posts_view)
 
         self.stacked_widget.setCurrentIndex(0)
@@ -123,11 +124,46 @@ class MainWindow(QMainWindow):
         from views.comment_view import CommentView
 
         comment_window = CommentView(post_id=post_id, parent_window=self)
+        comment_window.profileRequested.connect(self.show_profile_view)
         self.stacked_widget.addWidget(comment_window)
         self.stacked_widget.setCurrentIndex(self.stacked_widget.count() - 1)
 
+    @Slot()
+    def show_messages_view(self, replace_current=None):
+        from views.messages_window import MessagesWindow
+
+        previous = replace_current or self.stacked_widget.currentWidget()
+        messages_view = MessagesWindow(parent_window=self)
+        messages_view.chatRequested.connect(self.show_chat_view)
+        self.stacked_widget.addWidget(messages_view)
+        self.stacked_widget.setCurrentWidget(messages_view)
+        if previous and previous is not self.posts_view and previous is not messages_view:
+            if hasattr(previous, "cleanup"):
+                previous.cleanup()
+            self.stacked_widget.removeWidget(previous)
+            previous.deleteLater()
+
+    @Slot(str)
+    def show_chat_view(self, other_user_id):
+        from views.chat_view import ChatView
+
+        previous = self.stacked_widget.currentWidget()
+        try:
+            chat_view = ChatView(other_user_id, parent_window=self)
+        except Exception:
+            logger.exception("Unable to open conversation")
+            return
+        self.stacked_widget.addWidget(chat_view)
+        self.stacked_widget.setCurrentWidget(chat_view)
+        if previous and previous is not self.posts_view:
+            if hasattr(previous, "cleanup"):
+                previous.cleanup()
+            self.stacked_widget.removeWidget(previous)
+            previous.deleteLater()
+
 
 if __name__ == "__main__":
+    # checking for nuitka builds
     if "--check-avif" in sys.argv:
         from widgets.avif_widget import avif_codec_self_test
 
@@ -139,6 +175,4 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
     window = MainWindow()
-
-    # window.show()
     sys.exit(app.exec())

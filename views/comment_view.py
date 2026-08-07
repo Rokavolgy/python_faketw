@@ -1,7 +1,7 @@
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal, Slot
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea,
+    QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
     QMessageBox, QPushButton, QTextEdit, QSizePolicy
 )
 
@@ -12,7 +12,10 @@ from controller.post_controller import fetch_post_by_id
 from controller.user_session import UserSession
 from modal.comment import CommentData
 from modal.constants import Constants
+from widgets.clickable_labels import ClickableLabel
+from widgets.post_display import format_timestamp
 from widgets.post_widget import PostWidget
+from widgets.virtualized_list import VirtualizedWidgetList
 
 
 class DeleteCommentSignals(QObject):
@@ -20,26 +23,36 @@ class DeleteCommentSignals(QObject):
 
 
 class DeleteCommentTask(QRunnable):
-    def __init__(self, post_id, comment_id, user_id):
+    def __init__(self, post_id, comment_id):
         super().__init__()
         self.post_id = post_id
         self.comment_id = comment_id
-        self.user_id = user_id
         self.signals = DeleteCommentSignals()
 
     def run(self):
-        success = delete_comment(self.post_id, self.comment_id, self.user_id)
+        success = delete_comment(self.post_id, self.comment_id)
         self.signals.finished.emit(self.comment_id, success)
 
 
-# noinspection PyAttributeOutsideInit
-def update_image(label, pixmap, height, width):
-    scaled_pixmap = pixmap.scaled(height, width, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-    label.setPixmap(scaled_pixmap)
+class AddCommentSignals(QObject):
+    finished = Signal(bool)
+
+
+class AddCommentTask(QRunnable):
+    def __init__(self, post_id, content):
+        super().__init__()
+        self.post_id = post_id
+        self.content = content
+        self.signals = AddCommentSignals()
+
+    @Slot()
+    def run(self):
+        self.signals.finished.emit(add_comment(self.post_id, self.content))
 
 
 class CommentWidget(QWidget):
     removeRequested = Signal(str)
+    profileClicked = Signal(str)
 
     def __init__(self, comment_data, current_user_id=None):
         super().__init__()
@@ -47,6 +60,8 @@ class CommentWidget(QWidget):
         self.current_user_id = current_user_id
         self.thread_pool = QThreadPool.globalInstance()
         self.remove_button = None
+        self._disposed = False
+        self._binding_generation = 0
         self.init_ui()
 
     def init_ui(self):
@@ -57,67 +72,63 @@ class CommentWidget(QWidget):
         header_layout = QHBoxLayout()
 
         # Profile pic
-        self.profile_pic = QLabel()
+        self.profile_pic = ClickableLabel(self.comment_data.userId)
         self.profile_pic.setFixedSize(30, 30)
         self.profile_pic.setStyleSheet("background-color: lightgray; border-radius: 15px;")
+        self.profile_pic.setToolTip("View profile")
+        self.profile_pic.clicked.connect(self.profileClicked.emit)
 
-        if self.comment_data.userProfilePicUrl:
-            image_url = Constants.STORAGE_URL + self.comment_data.userProfilePicUrl
-            task = ImageLoaderTask(
-                image_url,
-                lambda pixmap: update_image(self.profile_pic, pixmap, 30, 30),
-            )
-            self.thread_pool.start(task)
+        self._start_profile_image_load()
 
         header_layout.addWidget(self.profile_pic)
 
         # User info
         user_info_layout = QVBoxLayout()
 
-        username_label = QLabel(self.comment_data.userName)
-        username_label.setFont(QFont("Wix Madefor Text", 10, QFont.Bold))
+        self.username_label = QLabel()
+        self.username_label.setTextFormat(Qt.PlainText)
+        self.username_label.setText(self.comment_data.userName)
+        self.username_label.setFont(QFont("Wix Madefor Text", 10, QFont.Bold))
+        self.time_label = QLabel(format_timestamp(self.comment_data.timestamp))
+        self.time_label.setStyleSheet("color: gray; font-size: 8pt;")
 
-        time_str = "Unknown date"
-        if self.comment_data.timestamp and hasattr(self.comment_data.timestamp, "year"):
-            from datetime import datetime
-            time_str = datetime.strftime(self.comment_data.timestamp, "%Y-%m-%d %H:%M")
-
-        time_label = QLabel(time_str)
-        time_label.setStyleSheet("color: gray; font-size: 8pt;")
-
-        user_info_layout.addWidget(username_label)
-        user_info_layout.addWidget(time_label)
+        user_info_layout.addWidget(self.username_label)
+        user_info_layout.addWidget(self.time_label)
         header_layout.addLayout(user_info_layout)
         header_layout.addStretch()
 
-        if self.current_user_id == self.comment_data.userId:
-            self.remove_button = QPushButton("Remove")
-            self.remove_button.setCursor(Qt.PointingHandCursor)
-            self.remove_button.setToolTip("Remove comment")
-            self.remove_button.setStyleSheet("""
-                QPushButton {
-                    color: #b42318;
-                    background: transparent;
-                    border: none;
-                    padding: 4px 6px;
-                    font-size: 9pt;
-                }
-                QPushButton:hover { background-color: #fee4e2; }
-                QPushButton:disabled { color: #999999; }
-            """)
-            self.remove_button.clicked.connect(
-                lambda: self.removeRequested.emit(self.comment_data.id)
-            )
-            header_layout.addWidget(self.remove_button)
+        self.remove_button = QPushButton("Remove")
+        self.remove_button.setCursor(Qt.PointingHandCursor)
+        self.remove_button.setToolTip("Remove comment")
+        self.remove_button.setStyleSheet("""
+            QPushButton {
+                color: #b42318;
+                background: transparent;
+                border: none;
+                padding: 4px 6px;
+                font-size: 9pt;
+            }
+            QPushButton:hover { background-color: #fee4e2; }
+            QPushButton:disabled { color: #999999; }
+        """)
+        self.remove_button.clicked.connect(
+            lambda: self.removeRequested.emit(self.comment_data.id)
+        )
+        self.remove_button.setVisible(
+            self.current_user_id == self.comment_data.userId
+        )
+        header_layout.addWidget(self.remove_button)
 
         main_layout.addLayout(header_layout)
 
         # Comment content
-        content_label = QLabel(self.comment_data.content)
-        content_label.setFont(QFont("Wix Madefor Text", 10))
-        content_label.setWordWrap(True)
-        content_label.setStyleSheet("margin: 5px 0 10px 35px;")
-        main_layout.addWidget(content_label)
+        self.content_label = QLabel()
+        self.content_label.setTextFormat(Qt.PlainText)
+        self.content_label.setText(self.comment_data.content)
+        self.content_label.setFont(QFont("Wix Madefor Text", 10))
+        self.content_label.setWordWrap(True)
+        self.content_label.setStyleSheet("margin: 5px 0 10px 35px;")
+        main_layout.addWidget(self.content_label)
 
         # Separator
         separator = QLabel()
@@ -126,14 +137,68 @@ class CommentWidget(QWidget):
         main_layout.addWidget(separator)
 
     def set_remove_pending(self, pending):
-        if self.remove_button:
+        if not self._disposed and self.remove_button:
             self.remove_button.setEnabled(not pending)
             self.remove_button.setText("Removing..." if pending else "Remove")
+
+    def update_profile_image(self, pixmap):
+        if self._disposed or pixmap is None:
+            return
+        scaled_pixmap = pixmap.scaled(
+            30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self.profile_pic.setPixmap(scaled_pixmap)
+
+    def _start_profile_image_load(self):
+        self.profile_pic.clear()
+        if not self.comment_data.userProfilePicUrl:
+            return
+        generation = self._binding_generation
+        image_url = Constants.STORAGE_URL + self.comment_data.userProfilePicUrl
+
+        def apply(pixmap):
+            if generation == self._binding_generation:
+                self.update_profile_image(pixmap)
+
+        self.thread_pool.start(ImageLoaderTask(image_url, apply))
+
+    def prepare_for_reuse(self):
+        self._binding_generation += 1
+        self.profile_pic.clear()
+
+    def bind_comment(self, comment_data):
+        self.prepare_for_reuse()
+        self.comment_data = comment_data
+        self._disposed = False
+        self.profile_pic.userId = comment_data.userId
+        self.username_label.setText(comment_data.userName)
+        self.time_label.setText(format_timestamp(comment_data.timestamp))
+        self.content_label.setText(comment_data.content)
+        self.remove_button.setVisible(
+            self.current_user_id == comment_data.userId
+        )
+        self.set_remove_pending(False)
+        self._start_profile_image_load()
+
+    def cleanup_and_delete(self):
+        if self._disposed:
+            return
+        self._disposed = True
+        self._binding_generation += 1
+        if self.remove_button:
+            try:
+                self.remove_button.clicked.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+        self.profile_pic.clear()
+        self.setParent(None)
+        self.deleteLater()
 
 
 class CommentView(QMainWindow):
     """View for displaying comments on a post"""
     commentPosted = Signal(object)
+    profileRequested = Signal(str)
 
     def __init__(self, post_id=None, profile_data=None, parent_window=None):
         super().__init__()
@@ -143,11 +208,12 @@ class CommentView(QMainWindow):
         self.post_data = None
         self.comments = []
         self.comments_label = None
-        self.comments_layout = None
+        self.comments_list = None
         self.comment_edit = None
         self.post_button = None
         self.post_widget = None
         self.pending_comment_deletions = set()
+        self._comment_task = None
 
         # Set up listener for real-time updates
         self.listener = FirestoreListener()
@@ -177,6 +243,7 @@ class CommentView(QMainWindow):
         if self.post_data:
             # Display the original post
             self.post_widget = PostWidget(self.post_data, hide_buttons=True, lazy_media=False)
+            self.post_widget.profileClicked.connect(self.profileRequested.emit)
             self.post_widget.setMaximumHeight(400)
             main_layout.addWidget(self.post_widget)
 
@@ -186,21 +253,18 @@ class CommentView(QMainWindow):
             # self.update_comments_label()
             # main_layout.addWidget(self.comments_label)
 
-            # Add scrollable comments section
-            comments_scroll = QScrollArea()
-            comments_scroll.setWidgetResizable(True)
-            comments_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-            comments_container = QWidget()
-            self.comments_layout = QVBoxLayout(comments_container)
-
-            # Add all comments
-            for comment in self.comments:
-                self.comments_layout.addWidget(self.create_comment_widget(comment))
-
-            self.comments_layout.addStretch()
-            comments_scroll.setWidget(comments_container)
-            main_layout.addWidget(comments_scroll)
+            self.comments_list = VirtualizedWidgetList(
+                widget_factory=self.create_comment_widget,
+                key_for_item=lambda comment: comment.id,
+                estimate_height=self.estimate_comment_height,
+                widget_binder=self.bind_comment_widget,
+                overscan_rows=3,
+            )
+            self.comments_list.setSizePolicy(
+                QSizePolicy.Expanding, QSizePolicy.Expanding
+            )
+            self.comments_list.set_items(self.comments)
+            main_layout.addWidget(self.comments_list)
 
             # Add comment input section
             comment_input_section = self.create_comment_input()
@@ -241,18 +305,6 @@ class CommentView(QMainWindow):
 
         self.post_button = QPushButton("Post Comment")
         self.post_button.setCursor(Qt.PointingHandCursor)
-        # self.post_button.setStyleSheet("""
-        #     QPushButton {
-        #         background-color: #1DA1F2;
-        #         color: white;
-        #         border-radius: 15px;
-        #         padding: 8px 16px;
-        #         font-weight: bold;
-        #     }
-        #     QPushButton:hover {
-        #         background-color: #0D91E2;
-        #     }
-        # """)
         self.post_button.clicked.connect(self.post_comment)
         button_layout.addWidget(self.post_button)
 
@@ -271,22 +323,16 @@ class CommentView(QMainWindow):
             QMessageBox.warning(self, "Authentication Required", "Please log in to post a comment.")
             return
 
-        profile_data = user_session.profile_data
-        user_name = profile_data.displayName if profile_data else "Unknown User"
-        profile_pic_url = profile_data.profileImageUrl if profile_data else ""
-
         if self.post_button:
             self.post_button.setEnabled(False)
             self.post_button.setText("Posting...")
 
-        success = add_comment(
-            self.post_id,
-            user_session.user_id,
-            user_name,
-            profile_pic_url,
-            comment_text,
-        )
+        self._comment_task = AddCommentTask(self.post_id, comment_text)
+        self._comment_task.signals.finished.connect(self.on_comment_post_finished)
+        self.thread_pool.start(self._comment_task)
 
+    @Slot(bool)
+    def on_comment_post_finished(self, success):
         if success:
             self.comment_edit.clear()
         else:
@@ -295,6 +341,7 @@ class CommentView(QMainWindow):
         if self.post_button:
             self.post_button.setEnabled(True)
             self.post_button.setText("Post Comment")
+        self._comment_task = None
 
     @Slot(CommentData)
     def on_comment_added(self, comment_data):
@@ -307,7 +354,8 @@ class CommentView(QMainWindow):
         )
         if existing_index is not None:
             self.comments[existing_index] = comment_data
-            self.rebuild_comments()
+            if self.comments_list:
+                self.comments_list.update_item(comment_data)
             return
 
         # Update comment count on post if available
@@ -317,9 +365,8 @@ class CommentView(QMainWindow):
         # Add to local comments list
         self.comments.append(comment_data)
 
-        # Add comment widget to UI
-        comment_widget = self.create_comment_widget(comment_data)
-        self.comments_layout.insertWidget(self.comments_layout.count() - 1, comment_widget)
+        if self.comments_list:
+            self.comments_list.insert_item(len(self.comments) - 1, comment_data)
 
         self.update_comments_label()
 
@@ -334,12 +381,35 @@ class CommentView(QMainWindow):
                 self.post_data.commentsCount = max(
                     0, (self.post_data.commentsCount or 0) - 1
                 )
-            self.rebuild_comments()
+            if self.comments_list:
+                self.comments_list.remove_key(comment_id)
+            self.update_comments_label()
 
     def create_comment_widget(self, comment):
         comment_widget = CommentWidget(comment, UserSession().user_id)
         comment_widget.removeRequested.connect(self.remove_comment)
+        comment_widget.profileClicked.connect(self.profileRequested.emit)
+        comment_widget.set_remove_pending(
+            comment.id in self.pending_comment_deletions
+        )
         return comment_widget
+
+    def bind_comment_widget(self, widget, comment):
+        widget.bind_comment(comment)
+        widget.set_remove_pending(
+            comment.id in self.pending_comment_deletions
+        )
+
+    @staticmethod
+    def estimate_comment_height(comment, viewport_width):
+        text_width = max(220, viewport_width - 80)
+        characters_per_line = max(20, text_width // 8)
+        content_lines = max(
+            1,
+            (len(comment.content or "") + characters_per_line - 1)
+            // characters_per_line,
+        )
+        return 85 + min(content_lines, 10) * 20
 
     @Slot(str)
     def remove_comment(self, comment_id):
@@ -362,7 +432,7 @@ class CommentView(QMainWindow):
 
         self.pending_comment_deletions.add(comment_id)
         self.set_comment_remove_pending(comment_id, True)
-        task = DeleteCommentTask(self.post_id, comment_id, user_session.user_id)
+        task = DeleteCommentTask(self.post_id, comment_id)
         task.signals.finished.connect(self.on_comment_delete_finished)
         self.thread_pool.start(task)
 
@@ -377,34 +447,11 @@ class CommentView(QMainWindow):
         QMessageBox.warning(self, "Remove Failed", "Failed to remove comment.")
 
     def set_comment_remove_pending(self, comment_id, pending):
-        if not self.comments_layout:
+        if not self.comments_list:
             return
-        for index in range(self.comments_layout.count()):
-            widget = self.comments_layout.itemAt(index).widget()
-            if (
-                    isinstance(widget, CommentWidget)
-                    and widget.comment_data.id == comment_id
-            ):
-                widget.set_remove_pending(pending)
-                return
-
-    def rebuild_comments(self):
-        if not self.comments_layout:
-            return
-
-        for i in reversed(range(self.comments_layout.count())):
-            item = self.comments_layout.itemAt(i)
-            widget = item.widget() if item else None
-            if isinstance(widget, CommentWidget):
-                self.comments_layout.removeWidget(widget)
-                widget.deleteLater()
-
-        for comment in self.comments:
-            comment_widget = self.create_comment_widget(comment)
-            self.comments_layout.insertWidget(
-                self.comments_layout.count() - 1, comment_widget
-            )
-        self.update_comments_label()
+        widget = self.comments_list.widget_for_key(comment_id)
+        if widget:
+            widget.set_remove_pending(pending)
 
     def update_comments_label(self):
         if self.comments_label:
@@ -438,6 +485,9 @@ class CommentView(QMainWindow):
             self.post_widget.cleanup_and_delete()
             self.post_widget = None
 
+        if self.comments_list:
+            self.comments_list.clear_items()
+            self.comments_list = None
         self.comments = []
         self.pending_comment_deletions.clear()
-        self.comments_layout = None
+        self._comment_task = None

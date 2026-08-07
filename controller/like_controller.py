@@ -1,12 +1,43 @@
 import logging
-from datetime import datetime
+from dataclasses import dataclass
 
+import requests
 from google.cloud import firestore
-from google.cloud.firestore import Increment
 
+from controller.auth_token import refresh_firebase_id_token
 from controller.firebase_client import get_db
+from controller.user_session import UserSession
+from modal.constants import Constants
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LikeUpdateResult:
+    liked: bool
+    likes_count: int
+
+
+def _send_like_request(post_id: str, liked: bool, id_token: str):
+    return requests.post(
+        Constants.LIKE_URL,
+        headers={
+            "Authorization": f"Bearer {id_token}",
+            "Content-Type": "application/json",
+        },
+        json={"postId": post_id, "liked": liked},
+        timeout=(5, 20),
+    )
+
+
+def _send_like_request_with_retry(post_id: str, liked: bool, id_token: str):
+    try:
+        return _send_like_request(post_id, liked, id_token)
+    except (requests.Timeout, requests.ConnectionError):
+        # This endpoint sets a desired state rather than incrementing blindly,
+        # so retrying after a lost/late response cannot double-like a post.
+        logger.warning("Like request timed out; retrying once for post %s", post_id)
+        return _send_like_request(post_id, liked, id_token)
 
 
 def fetch_user_likes(user_id):
@@ -23,62 +54,41 @@ def fetch_user_likes(user_id):
         return []
 
 
-def like_post(post_id, user_id):
-    try:
-        post_ref = get_db().collection("posts").document(post_id)
-        post_doc = post_ref.get()
+def set_post_like(post_id: str, liked: bool):
+    """Set the current user's desired like state through the Edge Function.
 
-        if not post_doc.exists:
-            logger.warning("Post %s not found while liking", post_id)
-            return False
-
-        like_doc_ref = post_ref.collection("likes").document(user_id)
-        if like_doc_ref.get().exists:
-            logger.debug("User %s already liked post %s", user_id, post_id)
-            return True
-
-        like_data = {"userId": user_id, "postId": post_id, "timestamp": datetime.now()}
-        like_doc_ref.set(like_data)
-        post_ref.update({"likesCount": Increment(1)})
-        return True
-    except Exception as e:
-        logger.exception("Error liking post %s", post_id)
-        return False
-
-
-def unlike_post(post_id, user_id):
-    try:
-        post_ref = get_db().collection("posts").document(post_id)
-        post_doc = post_ref.get()
-
-        if not post_doc.exists:
-            logger.warning("Post %s not found while unliking", post_id)
-            return False
-
-        like_doc_ref = post_ref.collection("likes").document(user_id)
-        if not like_doc_ref.get().exists:
-            logger.debug("User %s has not liked post %s", user_id, post_id)
-            return True
-
-        like_doc_ref.delete()
-        post_ref.update({"likesCount": Increment(-1)})
-        return True
-    except Exception as e:
-        logger.exception("Error unliking post %s", post_id)
-        return False
-
-
-def toggle_post_like(post_id, user_id):
-    if not user_id:
-        logger.warning("Unauthenticated like toggle requested")
-        return False
+    The client deliberately sends neither a user ID nor a like count. The Edge
+    Function derives the user from the Firebase ID token and computes the count
+    in a Firestore transaction.
+    """
+    user_session = UserSession()
+    if not user_session.is_authenticated or not user_session.id_token:
+        logger.warning("Unauthenticated like update requested")
+        return None
 
     try:
-        post_ref = get_db().collection("posts").document(post_id)
-        like_doc_ref = post_ref.collection("likes").document(user_id)
+        response = _send_like_request_with_retry(post_id, liked, user_session.id_token)
+        if response.status_code == 401 and refresh_firebase_id_token(user_session):
+            response = _send_like_request_with_retry(
+                post_id, liked, user_session.id_token
+            )
+        response.raise_for_status()
+        result = response.json()
 
-        if like_doc_ref.get().exists:
-            return unlike_post(post_id, user_id)
-    except Exception as e:
-        logger.exception("Error toggling like for post %s", post_id)
-        return False
+        if not isinstance(result, dict):
+            raise ValueError("Invalid like response from Edge Function")
+
+        authoritative_liked = result.get("liked")
+        likes_count = result.get("likesCount")
+        if (
+                not isinstance(authoritative_liked, bool)
+                or not isinstance(likes_count, int)
+                or isinstance(likes_count, bool)
+                or likes_count < 0
+        ):
+            raise ValueError("Invalid like response from Edge Function")
+
+        return LikeUpdateResult(authoritative_liked, likes_count)
+    except (requests.RequestException, ValueError, TypeError):
+        logger.exception("Error updating like for post %s", post_id)
+        return None

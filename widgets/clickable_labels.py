@@ -1,8 +1,9 @@
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QLabel
+
+from widgets.avif_widget import AvifWidget
 
 
-class ClickableLabel(QLabel):
+class ClickableLabel(AvifWidget):
     clicked = Signal(str)
 
     def __init__(self, userId=None):
@@ -21,7 +22,7 @@ class ClickableLabel(QLabel):
         super().mousePressEvent(event)
 
 
-class ClickableImageLabel(QLabel):
+class ClickableImageLabel(AvifWidget):
     clicked = Signal(str, str)
 
     def __init__(self, image_url=None, username=None):

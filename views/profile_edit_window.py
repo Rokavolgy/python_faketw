@@ -45,12 +45,8 @@ class ProfileEditWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
 
         # Load user data and initialize UI
-        self.load_user_data()
-        self.show()
-
-    def load_user_data(self):
-        """Load user data from backend and initialize UI"""
         self.init_ui()
+        self.show()
 
     def init_ui(self):
         # Main widget and layout
@@ -67,7 +63,7 @@ class ProfileEditWindow(QMainWindow):
         form_layout.setSpacing(15)
 
         # Title
-        title = QLabel("Edit Your Profile")
+        title = QLabel("Edit your profile")
         title.setFont(QFont("Wix Madefor Text", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         form_layout.addWidget(title)
@@ -81,7 +77,9 @@ class ProfileEditWindow(QMainWindow):
 
         self.profile_pic_label = ClickableLabel()
         self.profile_pic_label.setFixedSize(120, 120)
-        self.profile_pic_label.setStyleSheet("background-color: #ffffff;")
+        self.profile_pic_label.setStyleSheet(
+            "background: palette(base); border: 1px solid palette(mid);"
+        )
         self.profile_pic_label.setAlignment(Qt.AlignCenter)
         self.profile_pic_label.clicked.connect(self.select_profile_picture)
         profile_pic_container_layout.addWidget(self.profile_pic_label)
@@ -92,7 +90,9 @@ class ProfileEditWindow(QMainWindow):
 
         self.cover_pic_label = ClickableLabel()
         self.cover_pic_label.setFixedSize(600, 150)
-        self.cover_pic_label.setStyleSheet("background-color: #ffffff;")
+        self.cover_pic_label.setStyleSheet(
+            "background: palette(base); border: 1px solid palette(mid);"
+        )
         self.cover_pic_label.setAlignment(Qt.AlignCenter)
         self.cover_pic_label.clicked.connect(self.select_cover_picture)
         cover_pic_container_layout.addWidget(self.cover_pic_label)
@@ -107,10 +107,10 @@ class ProfileEditWindow(QMainWindow):
             task = ImageLoaderTask(image_url, self.update_cover_image)
             self.thread_pool.start(task)
 
-        pic_layout.addWidget(self.cover_pic_label)
-        pic_layout.addWidget(self.profile_pic_label)
         pic_layout.addStretch()
-        pic_layout.setAlignment(Qt.AlignHCenter)
+        pic_layout.addWidget(cover_pic_container)
+        pic_layout.addWidget(profile_pic_container)
+        pic_layout.addStretch()
 
         form_layout.addLayout(pic_layout)
 
@@ -191,12 +191,30 @@ class ProfileEditWindow(QMainWindow):
     @Slot(object)
     def update_profile_image(self, pixmap):
         """Update profile image in the UI"""
-        self.profile_pic_label.setPixmap(pixmap)
+        self._set_centered_preview(self.profile_pic_label, pixmap)
 
     @Slot(object)
     def update_cover_image(self, pixmap):
         """Update profile image in the UI"""
-        self.cover_pic_label.setPixmap(pixmap)
+        self._set_centered_preview(self.cover_pic_label, pixmap)
+
+    @staticmethod
+    def _set_centered_preview(label, pixmap):
+        if pixmap is None or pixmap.isNull():
+            label.clear()
+            return
+
+        target_size = label.size()
+        scaled = pixmap.scaled(
+            target_size,
+            Qt.KeepAspectRatioByExpanding,
+            Qt.SmoothTransformation,
+        )
+        left = max(0, (scaled.width() - target_size.width()) // 2)
+        top = max(0, (scaled.height() - target_size.height()) // 2)
+        label.setPixmap(
+            scaled.copy(left, top, target_size.width(), target_size.height())
+        )
 
     @Slot()
     def select_profile_picture(self):
@@ -228,7 +246,7 @@ class ProfileEditWindow(QMainWindow):
         if not username:
             QMessageBox.warning(self, "Error", "Username is empty.")
             return False
-        if not all(c.isalnum() or c == '_' for c in username):
+        if not all(c.isascii() and (c.isalnum() or c == '_') for c in username):
             QMessageBox.warning(self, "Error", "The username can only contain letters, numbers, and underscores.")
             return False
         if len(self.username_edit.text().strip()) < 3:
@@ -242,8 +260,8 @@ class ProfileEditWindow(QMainWindow):
         if not self.display_name_edit.text().strip():
             QMessageBox.warning(self, "Error", "Display name cannot be empty.")
             return False
-        if len(self.display_name_edit.text().strip()) > 50:
-            QMessageBox.warning(self, "Error", "Display name cannot exceed 50 characters.")
+        if len(self.display_name_edit.text().strip()) > 40:
+            QMessageBox.warning(self, "Error", "Display name cannot exceed 40 characters.")
             return False
         if len(self.display_name_edit.text().strip()) < 3:
             QMessageBox.warning(self, "Error", "Display name must be at least 3 characters long.")
@@ -251,8 +269,14 @@ class ProfileEditWindow(QMainWindow):
         if not self.bio_edit.toPlainText().strip():
             QMessageBox.warning(self, "Error", "Bio cannot be empty.")
             return False
+        if len(self.bio_edit.toPlainText().strip()) > 500:
+            QMessageBox.warning(self, "Error", "Bio cannot exceed 500 characters.")
+            return False
         if not self.location_edit.text().strip():
             QMessageBox.warning(self, "Error", "Location cannot be empty.")
+            return False
+        if len(self.location_edit.text().strip()) > 100:
+            QMessageBox.warning(self, "Error", "Location cannot exceed 100 characters.")
             return False
         return True
 
@@ -296,40 +320,40 @@ class ProfileEditWindow(QMainWindow):
                 self.finalize_save()
 
     def save_profile_pic_then_continue(self):
-        def on_upload_success(image_url):
+        def continue_after_upload(image_url):
             self.user_data.profileImageUrl = image_url
             if self.new_cover_pic_path:
                 self.save_cover_pic_then_continue()
-                self.image_uploader.signals.success_signal.disconnect(on_upload_success)
-                self.image_uploader.signals.failure_signal.disconnect(on_upload_failure)
-                return
             else:
                 self.finalize_save()
 
-        def on_upload_failure(error_msg):
-            QMessageBox.critical(
-                self, "Upload Failed", f"Failed to upload image: {error_msg}"
-            )
-
-        self.image_uploader.signals.success_signal.connect(on_upload_success)
-        self.image_uploader.signals.failure_signal.connect(on_upload_failure)
-        self.image_uploader.upload_image(self.new_profile_pic_path, compress=True)
+        self._upload_profile_asset(self.new_profile_pic_path, continue_after_upload)
 
     def save_cover_pic_then_continue(self):
-        def on_upload_success(image_url):
+        def continue_after_upload(image_url):
             self.user_data.coverImageUrl = image_url
-            self.image_uploader.signals.success_signal.disconnect(on_upload_success)
-            self.image_uploader.signals.failure_signal.disconnect(on_upload_failure)
             self.finalize_save()
 
+        self._upload_profile_asset(self.new_cover_pic_path, continue_after_upload)
+
+    def _upload_profile_asset(self, path, continue_after_upload):
+        def disconnect_handlers():
+            self.image_uploader.signals.success_signal.disconnect(on_upload_success)
+            self.image_uploader.signals.failure_signal.disconnect(on_upload_failure)
+
+        def on_upload_success(image_url):
+            disconnect_handlers()
+            continue_after_upload(image_url)
+
         def on_upload_failure(error_msg):
+            disconnect_handlers()
             QMessageBox.critical(
                 self, "Upload Failed", f"Failed to upload image: {error_msg}"
             )
 
         self.image_uploader.signals.success_signal.connect(on_upload_success)
         self.image_uploader.signals.failure_signal.connect(on_upload_failure)
-        self.image_uploader.upload_image(self.new_cover_pic_path, compress=True)
+        self.image_uploader.upload_image(path, compress=True)
 
     def finalize_save(self):
         try:
@@ -346,10 +370,12 @@ class ProfileEditWindow(QMainWindow):
                 self.profileCreated.emit(self.user_data)  # Emit the new signal
                 self.close()
             else:
-                update_user_profile(UserSession().user_id, self.user_data)
+                success = update_user_profile(UserSession().user_id, self.user_data)
+                if not success:
+                    QMessageBox.critical(self, "Error", "Failed to update profile.")
+                    return
                 clear_cache()
                 self.profileUpdated.emit(self.user_data)
-                # QMessageBox.information(self, "Success", "Profile updated successfully!")
                 self.close()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to update profile: {e}")
