@@ -475,11 +475,8 @@ class CommentView(QMainWindow):
     def cleanup(self):
         if hasattr(self, "listener"):
             self.listener.stop_listening()
-            try:
-                self.listener.commentAddedSignal.disconnect(self.on_comment_added)
-                self.listener.commentRemovedSignal.disconnect(self.on_comment_removed)
-            except Exception:
-                pass
+            self.listener.commentAddedSignal.disconnect(self.on_comment_added)
+            self.listener.commentRemovedSignal.disconnect(self.on_comment_removed)
 
         if self.post_widget:
             self.post_widget.cleanup_and_delete()
