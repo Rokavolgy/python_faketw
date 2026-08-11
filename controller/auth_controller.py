@@ -90,8 +90,8 @@ def login_user(email, password):
             user_session.set_profile_data(default_profile)
             if not create_user_profile(user_session.user_id, default_profile):
                 raise RuntimeError("Unable to create the default user profile")
-        logger.debug("User profile loaded for %s", user_session.user_id)
+        logger.debug("User profile loaded.")
         return True, response
-    except Exception:
+    except (TypeError, RuntimeError, HTTPError) as e:
         logger.exception("Login failed")
         return False, response
