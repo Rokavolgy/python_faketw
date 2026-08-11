@@ -173,7 +173,8 @@ def is_animated_file(file_path: str) -> bool:
             from PIL import Image
             with Image.open(file_path) as img:
                 return hasattr(img, 'n_frames') and img.n_frames > 1
-    except Exception:
+    except (TypeError, RuntimeError) as e:
+        logger.warning("unable to determine if file is animated")
         pass
-
-    return False
+    finally:
+        return False

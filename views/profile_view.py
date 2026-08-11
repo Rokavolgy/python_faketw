@@ -18,6 +18,7 @@ from controller.image_loader_task import ImageLoaderTask
 from controller.post_controller import fetch_posts_and_user_info
 from controller.profiler import track_execution_time
 from controller.user_session import UserSession
+from main_window import logger
 from modal.constants import Constants
 from modal.post import PostData
 from modal.user import ProfileData
@@ -336,11 +337,8 @@ class ProfileView(QMainWindow):
         self._cleaned_up = True
         if hasattr(self, 'listener'):
             self.listener.stop_listening()
-            try:
-                self.listener.newPostsSignal.disconnect(self.on_post_notification)
-                self.listener.removeFromStoreSignal.disconnect(self.on_remove_from_store)
-            except Exception:
-                pass
+            self.listener.newPostsSignal.disconnect(self.on_post_notification)
+            self.listener.removeFromStoreSignal.disconnect(self.on_remove_from_store)
 
         if self.post_list:
             self.post_list.clear_items()
@@ -389,6 +387,5 @@ class ProfileView(QMainWindow):
             self.deleteLater()
 
         else:
-
-            assert "the previous widget doesnt exist."
+            logger.info("no stacked widget found. application will quit.")
             self.close()

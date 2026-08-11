@@ -11,6 +11,7 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QLabel
 
 from controller.media_store import MediaStore
+from main_window import logger
 
 MAX_ANIMATED_AVIF_FRAMES = 90
 MAX_DECODED_AVIF_BYTES = 48 * 1024 * 1024
@@ -166,9 +167,10 @@ class AvifMovie:
                 self.frames.append(pixmap)
                 self.durations.append(duration)
 
-        except Exception as e:
+        except (TypeError, RuntimeError) as e:
+            logger.exception("Error processing AVIF frames")
             pass
-            #logger.exception("Error processing AVIF frames")
+
 
     def _pil_to_qpixmap(self, pil_image: Image.Image) -> QPixmap:
         """Convert PIL Image to QPixmap"""
@@ -261,7 +263,7 @@ class AvifMovie:
         self.stop()
         try:
             self.timer.timeout.disconnect(self._next_frame)
-        except Exception:
+        except (TypeError, RuntimeError):
             pass
         self.frames = []
         self.durations = []
@@ -388,7 +390,7 @@ class AvifWidget(QLabel):
         self.clearAnimation()
         try:
             self._update_timer.timeout.disconnect(self._update_display)
-        except Exception:
+        except (TypeError, RuntimeError):
             pass
 
     def setPaused(self, paused: bool):
