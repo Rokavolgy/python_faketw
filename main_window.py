@@ -29,21 +29,19 @@
 # nuitka-project: --nofollow-import-to=_imagingtk
 
 
-
 import logging
 import sys
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, QThreadPool
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
 from controller.logging_config import configure_logging
 from modal.user import ProfileData
+from views.login_window import LoginWindow
 
 logger = logging.getLogger(__name__)
 configure_logging()
-
-from views.login_window import LoginWindow
 
 
 class MainWindow(QMainWindow):
@@ -58,6 +56,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stacked_widget)
         font_id = QFontDatabase.addApplicationFont("res/fonts/WixMadeforText-Regular.ttf")
         font_id = QFontDatabase.addApplicationFont("res/fonts/WixMadeforText-Bold.ttf")
+
+        QThreadPool.globalInstance().setMaxThreadCount(8)
 
         if font_id != -1:
             font_families = QFontDatabase.applicationFontFamilies(font_id)

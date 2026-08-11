@@ -167,7 +167,8 @@ class ImageLoaderTask(QRunnable):
             if self.response_getter
             else requests.get(self.image_url, timeout=(5, 20))
         )
-        response.raise_for_status()
+        if not response.ok:
+            return None
 
         temporary_path = None
         try:

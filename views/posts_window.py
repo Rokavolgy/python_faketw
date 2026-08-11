@@ -214,6 +214,7 @@ class PostsWindow(QMainWindow):
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.listener.initialPostsLoadedSignal.disconnect()
         if self.loading_label:
+            self.loading_label.deleteLater()
             self.loading_label = None
         self.schedule_lazy_media_loads()
 
