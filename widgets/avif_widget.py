@@ -1,3 +1,4 @@
+import array
 import hashlib
 import math
 import os
@@ -55,7 +56,7 @@ class AvifMovie:
     def __init__(self, parent=None):
         self.parent = parent
         self.frames: List[QPixmap] = []
-        self.durations: List[int] = []
+        self.durations: array.array = array.array("H")
         self.current_frame = 0
         self.timer = QTimer(parent)
         self.timer.timeout.connect(self._next_frame)
@@ -120,7 +121,7 @@ class AvifMovie:
     def _load_single_frame(self, img: Image.Image):
         """Load a single frame (static image)"""
         self.frames = []
-        self.durations = []
+        self.durations: array.array = array.array("H")
 
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
@@ -132,7 +133,7 @@ class AvifMovie:
     def _load_animated_frames(self, img: Image.Image):
         """Load all frames from animated AVIF"""
         self.frames = []
-        self.durations = []
+        self.durations: array.array = array.array("H")
 
         try:
             frame_count = getattr(img, 'n_frames', 1)
@@ -265,8 +266,8 @@ class AvifMovie:
             self.timer.timeout.disconnect(self._next_frame)
         except (TypeError, RuntimeError):
             pass
-        self.frames = []
-        self.durations = []
+        self.frames = None
+        self.durations = None
         self.current_frame = 0
         self.current_loop = 0
         self._is_valid = False
