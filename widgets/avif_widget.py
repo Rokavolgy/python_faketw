@@ -52,7 +52,18 @@ class AvifMovie:
     A movie-like class for handling animated AVIF files
     Similar to QMovie but specifically for AVIF format
     """
-
+    __slots__ = (
+        "parent",
+        "frames",
+        "durations",
+        "current_frame",
+        "timer",
+        "scaled_size",
+        "loop_count",
+        "current_loop",
+        "_is_valid",
+        "_shared_frame_set",
+    )
     def __init__(self, parent=None):
         self.parent = parent
         self.frames: List[QPixmap] = []
