@@ -177,6 +177,9 @@ class AvifMovie:
 
                 pixmap = self._pil_to_qpixmap(frame)
                 self.frames.append(pixmap)
+                if duration > 65534:
+                    logger.warning("Maximum duration of frame")
+                    duration = 65534
                 self.durations.append(duration)
 
         except (TypeError, RuntimeError) as e:
