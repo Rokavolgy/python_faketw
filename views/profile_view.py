@@ -1,7 +1,7 @@
 import gc
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer, Slot
+from PySide6.QtCore import Qt, QThreadPool, QTimer, Slot, QDate, QLocale
 from PySide6.QtGui import QFont, QPixmapCache
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -178,8 +178,15 @@ class ProfileView(QMainWindow):
 
             if self.profile_data.createdAt:
                 joined_date = datetime.strftime(self.profile_data.createdAt, "%B %Y")
-                joined = QLabel(f"🗓️ Joined {joined_date}")
+                joined = QLabel(f"Joined {joined_date}")
                 meta_layout.addWidget(joined)
+
+            if self.profile_data.dateOfBirth:
+                locale = QLocale.system()
+                date = QDate(self.profile_data.dateOfBirth.year, self.profile_data.dateOfBirth.month,
+                             self.profile_data.dateOfBirth.day)
+                date_label = QLabel(f"Date of Birth: {locale.toString(date, QLocale.FormatType.ShortFormat)}")
+                meta_layout.addWidget(date_label)
 
         meta_layout.addStretch()
         details_layout.addWidget(meta_widget)

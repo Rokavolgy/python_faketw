@@ -2,7 +2,8 @@ import logging
 import weakref
 
 from PySide6 import QtCore
-from PySide6.QtCore import Signal, Qt, QThreadPool, QThread, QBuffer, QRunnable, Slot, QObject
+from PySide6.QtCore import Signal, Qt, QThreadPool, QThread, QBuffer, QRunnable, Slot, QObject, QDateTime, \
+    QLocale
 from PySide6.QtGui import QFont, QMovie, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -22,7 +23,6 @@ from modal.post import PostData
 from views.image_preview_window import ImagePreviewWindow
 from widgets.clickable_labels import ClickableLabel, ClickableImageLabel
 from widgets.like_comment_button import PostButton
-from widgets.post_display import format_timestamp
 from widgets.qmovie_pipeline import configure_qmovie
 
 logger = logging.getLogger(__name__)
@@ -317,7 +317,11 @@ class PostWidget(QWidget):
         self.profile_pic.userId = post_data.userId
         self.username_label.setText(post_data.userName)
         self.content_label.setText(post_data.content)
-        self.time_label.setText(format_timestamp(post_data.timestamp))
+        time = QDateTime(self.post_data.timestamp.year, self.post_data.timestamp.month, self.post_data.timestamp.day,
+                         self.post_data.timestamp.hour, self.post_data.timestamp.minute,
+                         self.post_data.timestamp.second)
+        locale = QLocale.system()
+        self.time_label.setText(f"{locale.toString(time, QLocale.FormatType.ShortFormat)}")
         self.apply_like_state(
             post_data.likedByCurrentUser,
             post_data.likesCount or 0,
@@ -355,11 +359,17 @@ class PostWidget(QWidget):
         self.username_label.setText(self.post_data.userName)
         self.username_label.setFont(QFont("Wix Madefor Text", 12, QFont.Bold))
 
-        time_str = format_timestamp(self.post_data.timestamp)
-        if time_str == "Unknown date":
-            logger.debug("Post has an invalid timestamp")
-        self.time_label = QLabel(time_str)
-        self.time_label.setForegroundRole(QPalette.PlaceholderText)
+        try:
+            time = QDateTime(self.post_data.timestamp.year, self.post_data.timestamp.month,
+                             self.post_data.timestamp.day, self.post_data.timestamp.hour,
+                             self.post_data.timestamp.minute, self.post_data.timestamp.second)
+            locale = QLocale.system()
+            self.time_label = QLabel(f"{locale.toString(time, QLocale.FormatType.ShortFormat)}")
+            self.time_label.setForegroundRole(QPalette.PlaceholderText)
+        except RuntimeError:
+            self.time_label = QLabel(f"Unknown date")
+            logger.debug("Unknown date or time")
+
 
         user_info_layout.addWidget(self.username_label)
         user_info_layout.addWidget(self.time_label)
@@ -371,7 +381,7 @@ class PostWidget(QWidget):
         # szöveg
         self.content_label = QLabel()
         self.content_label.setTextFormat(Qt.PlainText)
-        self.content_label.setText(self.post_data.content)
+        # self.content_label.setText(self.post_data.content)
         self.content_label.setFont(QFont("Wix Madefor Text", 12))
         self.content_label.setWordWrap(True)
         self.content_label.setStyleSheet("margin: 10px 0;")

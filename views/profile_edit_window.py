@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal, Slot, QThreadPool
+from PySide6.QtCore import Qt, Signal, Slot, QThreadPool, QDate
 from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFileDialog,
     QMessageBox,
-    QScrollArea,
+    QScrollArea, QDateEdit,
 )
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
@@ -41,7 +41,6 @@ class ProfileEditWindow(QMainWindow):
         self.is_registering = is_registering
 
         self.setWindowTitle("Fwitter - Edit Profile")
-        self.setMinimumSize(1000, 600)
         self.setMinimumSize(1200, 800)
 
         # Load user data and initialize UI
@@ -159,6 +158,20 @@ class ProfileEditWindow(QMainWindow):
         location_layout.addWidget(self.location_edit)
         form_layout.addLayout(location_layout)
 
+        # Birth of date
+        date_layout = QVBoxLayout()
+        date_edit = QLabel("Birth Date:")
+        date_edit.setFont(QFont("Wix Madefor Text", 11))
+        date = QDate()
+        date.setDate(self.user_data.dateOfBirth.year, self.user_data.dateOfBirth.month, self.user_data.dateOfBirth.day)
+        self.date_edit = QDateEdit(date)
+        self.date_edit.setFont(QFont("Wix Madefor Text", 12))
+        self.date_edit.setStyleSheet("padding: 8px;")
+        self.date_edit.setMaximumDate(QDate.currentDate())
+        date_layout.addWidget(date_edit)
+        date_layout.addWidget(self.date_edit)
+        form_layout.addLayout(date_layout)
+
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
@@ -252,11 +265,9 @@ class ProfileEditWindow(QMainWindow):
         if len(self.username_edit.text().strip()) < 3:
             QMessageBox.warning(self, "Error", "Username is too short.")
             return False
-
         if len(self.username_edit.text().strip()) > 30:
             QMessageBox.warning(self, "Error", "Username is too long.")
             return False
-
         if not self.display_name_edit.text().strip():
             QMessageBox.warning(self, "Error", "Display name cannot be empty.")
             return False
@@ -278,7 +289,7 @@ class ProfileEditWindow(QMainWindow):
         if len(self.location_edit.text().strip()) > 100:
             QMessageBox.warning(self, "Error", "Location cannot exceed 100 characters.")
             return False
-        return True
+        return True  # these are also validated on firestore
 
     @Slot()
     def save_profile(self):
@@ -291,16 +302,18 @@ class ProfileEditWindow(QMainWindow):
             QMessageBox.warning(self, "error", "username is not valid")
             return
         self.user_data = UserSession().profile_data
+        qdate = self.date_edit.date()
         if self.user_data:
             self.user_data.username = username
             self.user_data.displayName = self.display_name_edit.text().strip()
             self.user_data.bio = self.bio_edit.toPlainText().strip()
             self.user_data.location = self.location_edit.text().strip()
+            self.user_data.dateOfBirth = datetime(qdate.year(), qdate.month(), qdate.day())
         else:
             self.user_data = ProfileData(
                 id=UserSession().user_id,
                 website="",
-                dateOfBirth=datetime(2000,1,8),  # well... this is not a date of birth, but we don't have it in the UI
+                dateOfBirth=datetime(qdate.year(), qdate.month(), qdate.day()),
                 createdAt= SERVER_TIMESTAMP,
                 profileImageUrl="",
                 coverImageUrl="",
@@ -367,7 +380,7 @@ class ProfileEditWindow(QMainWindow):
                     return
                 clear_cache()
                 UserSession().set_profile_data(self.user_data)
-                self.profileCreated.emit(self.user_data)  # Emit the new signal
+                self.profileCreated.emit(self.user_data)
                 self.close()
             else:
                 success = update_user_profile(UserSession().user_id, self.user_data)
